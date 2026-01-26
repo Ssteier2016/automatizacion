@@ -6,23 +6,25 @@ import random
 import googlemaps
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from flask import Flask, render_template, request, jsonify, Response, stream_with_context
+from flask import Flask, render_template, request, jsonify, Response, stream_with_context, send_from_directory
 
 app = Flask(__name__)
 
-# Configuración
-app.config['UPLOAD_FOLDER'] = 'uploads'
+# Configuración de carpetas temporales para Render
+app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# CONFIGURACIÓN GOOGLE MAPS - Reemplaza con tu clave real
-# Nota: La API de Google Maps es necesaria para la búsqueda por zona
-GOOGLE_MAPS_KEY = 'AIzaSyBGJ8B2z9p52LM-x9vEwxO9pmx8V9w7Ws4'
+# Clave de API de Google Maps (Configurada en Render o valor directo)
+GOOGLE_MAPS_KEY = os.environ.get('GOOGLE_MAPS_KEY', 'AIzaSyBGJ8B2z9p52LM-x9vEwxO9pmx8V9w7Ws4')
+
 try:
     gmaps = googlemaps.Client(key=GOOGLE_MAPS_KEY)
-except:
+except Exception as e:
+    print(f"Error al conectar con Google Maps: {e}")
     gmaps = None
 
 def enviar_correo_real(servidor_smtp, puerto, usuario, password, destinatario, asunto, cuerpo):
+    """Gestión de conexión SMTP y envío de correo."""
     msg = MIMEMultipart()
     msg['From'] = usuario
     msg['To'] = destinatario
@@ -45,53 +47,58 @@ def index():
 
 @app.route('/search_places', methods=['POST'])
 def search_places():
-    """Busca lugares en Google Maps y crea un CSV temporal."""
+    """Busca en Google Maps y genera el CSV para descargar."""
     if not gmaps:
-        return jsonify({'error': 'Google Maps API no configurada en el servidor'}), 500
+        return jsonify({'error': 'La API de Google Maps no está configurada.'}), 500
     
     data = request.json
     zona = data.get('zona')
     if not zona:
-        return jsonify({'error': 'Debes ingresar una zona'}), 400
+        return jsonify({'error': 'Debes ingresar una zona.'}), 400
 
     query = f"dieteticas en {zona}"
     
     try:
-        # Buscar lugares
         places_result = gmaps.places(query=query)
-        
         lista_dieteticas = []
+        
         for place in places_result.get('results', []):
-            info = {
+            lista_dieteticas.append({
                 'nombre': place.get('name'),
                 'direccion': place.get('formatted_address'),
-                # Google Maps no da emails. Ponemos un placeholder para que el usuario sepa que falta.
-                'email': '' 
-            }
-            lista_dieteticas.append(info)
+                'email': '' # Espacio para completar
+            })
         
         if not lista_dieteticas:
-            return jsonify({'error': 'No se encontraron resultados en esa zona'}), 404
+            return jsonify({'error': 'No se encontraron resultados.'}), 404
 
         df = pd.DataFrame(lista_dieteticas)
-        filename = f"busqueda_{int(time.time())}.csv"
+        # Nombre único con timestamp
+        filename = f"dieteticas_{zona.replace(' ', '_')}_{int(time.time())}.csv"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        df.to_csv(filepath, index=False)
+        
+        # Guardar con codificación para Excel
+        df.to_csv(filepath, index=False, encoding='utf-8-sig')
         
         return jsonify({
             'success': True, 
-            'filepath': filepath, 
-            'total_rows': len(df),
             'filename': filename,
-            'message': 'Búsqueda completada. IMPORTANTE: Google Maps no provee emails, debes editarlos en el archivo o usar un buscador de mails.'
+            'total_rows': len(df),
+            'filepath': filepath
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/download/<filename>')
+def download_file(filename):
+    """Ruta crítica: Permite descargar el archivo del servidor a tu Mac."""
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=True)
+
 @app.route('/preview_csv', methods=['POST'])
 def preview_csv():
+    """Procesa el archivo que el usuario sube con los emails ya escritos."""
     if 'file' not in request.files:
-        return jsonify({'error': 'No se subió ningún archivo'}), 400
+        return jsonify({'error': 'No se subió ningún archivo.'}), 400
     
     file = request.files['file']
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
@@ -102,18 +109,15 @@ def preview_csv():
         df.columns = [c.lower().strip() for c in df.columns]
         
         if 'email' not in df.columns:
-            return jsonify({'error': 'Falta la columna "email"'}), 400
+            return jsonify({'error': 'El archivo debe tener una columna "email".'}), 400
 
-        return jsonify({
-            'success': True, 
-            'filepath': filepath, 
-            'total_rows': len(df)
-        })
+        return jsonify({'success': True, 'filepath': filepath, 'total_rows': len(df)})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': f"Error al leer: {str(e)}"}), 500
 
 @app.route('/start_campaign', methods=['POST'])
 def start_campaign():
+    """Envío masivo con streaming de logs en tiempo real."""
     data = request.form
     filepath = data.get('filepath')
     email_user = data.get('email_user')
@@ -131,41 +135,30 @@ def start_campaign():
 
             yield f"data: {{'status': 'start', 'total': {total}}}\n\n"
 
-            success_count = 0
-            fail_count = 0
-
             for index, row in df.iterrows():
                 destinatario = row.get('email')
                 nombre = row.get('nombre', 'Cliente')
                 
-                if pd.isna(destinatario) or destinatario == '':
-                    log_html = f"<div class='mb-2 p-2 border-b border-gray-700 text-sm text-yellow-500 font-mono'>[{index+1}] Saltado: Sin email</div>"
-                    yield f"data: {{'progress': {index + 1}, 'log': \"{log_html}\"}}\n\n"
+                if pd.isna(destinatario) or not str(destinatario).strip():
+                    log = f"<div class='text-amber-500'>[{index+1}] Fila saltada: Sin email</div>"
+                    yield f"data: {{'progress': {index + 1}, 'log': \"{log}\"}}\n\n"
                     continue
 
-                # --- Lógica de Pausa Anti-Spam ---
-                # Esperamos un tiempo aleatorio antes de cada envío para parecer humanos
-                tiempo_espera = random.randint(20, 45) # Segundos
-                
-                cuerpo_final = body_template.replace('{nombre}', str(nombre))
-
-                # MODO PRODUCCIÓN
-                sent_ok, msg_status = enviar_correo_real(smtp_host, smtp_port, email_user, email_pass, destinatario, subject_template, cuerpo_final)
-                
-                if sent_ok:
-                    success_count += 1
-                    status_color = "text-green-400"
+                # Pausa Anti-Spam (Excepto en el primero)
+                if index > 0:
+                    pausa = random.randint(20, 45)
+                    time.sleep(pausa)
                 else:
-                    fail_count += 1
-                    status_color = "text-red-400"
+                    pausa = 0
 
-                log_html = f"<div class='mb-2 p-2 border-b border-gray-700 text-sm font-mono'><span class='text-gray-500'>[{index+1}/{total}]</span> {destinatario}: <span class='{status_color}'>{msg_status}</span> <span class='text-xs text-gray-600'>(Pausa: {tiempo_espera}s)</span></div>"
-                yield f"data: {{'progress': {index + 1}, 'log': \"{log_html}\"}}\n\n"
+                cuerpo_final = body_template.replace('{nombre}', str(nombre))
+                ok, status = enviar_correo_real(smtp_host, smtp_port, email_user, email_pass, destinatario, subject_template, cuerpo_final)
                 
-                # Pausamos la ejecución del hilo para este envío
-                time.sleep(tiempo_espera)
+                color = "text-green-400" if ok else "text-red-400"
+                log_html = f"<div class='mb-1 p-1 border-b border-slate-700 font-mono text-xs'><span class='text-slate-500'>#{index+1}</span> {destinatario}: <span class='{color}'>{status}</span> <span class='text-[10px] text-slate-600'>(Pausa: {pausa}s)</span></div>"
+                yield f"data: {{'progress': {index + 1}, 'log': \"{log_html}\"}}\n\n"
 
-            yield f"data: {{'status': 'finished', 'success': {success_count}, 'fail': {fail_count}}}\n\n"
+            yield f"data: {{'status': 'finished'}}\n\n"
 
         except Exception as e:
              yield f"data: {{'error': \"{str(e)}\"}}\n\n"
@@ -173,4 +166,5 @@ def start_campaign():
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
