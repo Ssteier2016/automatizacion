@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Campañas - Yerba Mate</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg { background: linear-gradient(135deg, #10B981 0%, #059669 100%); }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans">
+
+    <!-- Navbar -->
+    <nav class="gradient-bg text-white shadow-lg">
+        <div class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <i class="fa-solid fa-leaf text-2xl"></i>
+                <span class="font-bold text-xl tracking-wide">YerbaPromo B2B</span>
+            </div>
+            <div class="text-sm opacity-90">Panel de Control</div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-6 py-8">
+        
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Columna Izquierda: Configuración -->
+            <div class="lg:col-span-1 space-y-6">
+                
+                <!-- Card 1: Credenciales -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <h2 class="text-lg font-bold text-gray-700 mb-4 border-b pb-2"><i class="fa-solid fa-key mr-2 text-green-600"></i>Configuración SMTP</h2>
+                    <form id="configForm" class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 uppercase">Tu Email (Remitente)</label>
+                            <input type="email" id="email_user" placeholder="ejemplo@gmail.com" class="w-full mt-1 p-2 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 uppercase">Contraseña de Aplicación</label>
+                            <input type="password" id="email_pass" placeholder="xxxx xxxx xxxx xxxx" class="w-full mt-1 p-2 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none">
+                            <p class="text-xs text-gray-400 mt-1">Si usas Gmail, usa una "App Password".</p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 uppercase">Host</label>
+                                <input type="text" id="smtp_host" value="smtp.gmail.com" class="w-full mt-1 p-2 border rounded-lg text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 uppercase">Puerto</label>
+                                <input type="number" id="smtp_port" value="587" class="w-full mt-1 p-2 border rounded-lg text-sm">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Card 2: Carga de Datos -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <h2 class="text-lg font-bold text-gray-700 mb-4 border-b pb-2"><i class="fa-solid fa-file-csv mr-2 text-green-600"></i>Base de Datos</h2>
+                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-50 transition cursor-pointer relative">
+                        <input type="file" id="csvFile" accept=".csv, .xlsx" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                        <i class="fa-solid fa-cloud-arrow-up text-3xl text-gray-400 mb-2"></i>
+                        <p class="text-sm text-gray-500">Arrastra tu Excel o CSV aquí</p>
+                    </div>
+                    <div id="fileInfo" class="hidden mt-4 bg-green-50 p-3 rounded-lg border border-green-100 text-sm">
+                        <p class="text-green-800 font-semibold" id="fileName">archivo.csv</p>
+                        <p class="text-green-600" id="rowCount">0 contactos encontrados</p>
+                        <input type="hidden" id="serverFilePath">
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Columna Derecha: Redacción y Ejecución -->
+            <div class="lg:col-span-2 space-y-6">
+                
+                <!-- Editor de Correo -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-fit">
+                    <h2 class="text-lg font-bold text-gray-700 mb-4 border-b pb-2"><i class="fa-solid fa-pen-nib mr-2 text-green-600"></i>Redactar Campaña</h2>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <input type="text" id="subject" placeholder="Asunto del correo..." class="w-full p-3 font-semibold text-gray-700 border-b-2 border-gray-200 focus:border-green-500 outline-none transition" value="Propuesta exclusiva: Yerba Mate Premium">
+                        </div>
+                        
+                        <div class="relative">
+                            <textarea id="body" rows="8" class="w-full p-4 bg-gray-50 rounded-lg border focus:ring-2 focus:ring-green-500 outline-none resize-none text-gray-700" placeholder="Escribe tu mensaje aquí..."></textarea>
+                            <div class="absolute bottom-3 right-3 text-xs text-gray-400 bg-white px-2 py-1 rounded border">
+                                Tips: Usa <b>{nombre}</b> para personalizar.
+                            </div>
+                        </div>
+
+                        <div class="flex justify-between items-center pt-2">
+                            <div class="text-sm text-gray-500">
+                                <i class="fa-solid fa-clock mr-1"></i> Pausa anti-spam automática activa (5-15s)
+                            </div>
+                            <button onclick="startCampaign()" id="sendBtn" class="bg-gray-800 text-white px-6 py-3 rounded-lg hover:bg-gray-900 transition flex items-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                                <i class="fa-solid fa-paper-plane"></i> Iniciar Campaña
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Consola de Progreso -->
+                <div id="consoleArea" class="hidden bg-gray-900 text-gray-200 p-6 rounded-xl shadow-lg font-mono text-sm h-64 overflow-y-auto">
+                    <div class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
+                        <span class="text-green-400 font-bold"> > Terminal de Envío</span>
+                        <span id="progressText">0%</span>
+                    </div>
+                    
+                    <!-- Barra de progreso -->
+                    <div class="w-full bg-gray-700 rounded-full h-2.5 mb-4">
+                        <div id="progressBar" class="bg-green-500 h-2.5 rounded-full" style="width: 0%"></div>
+                    </div>
+
+                    <!-- Logs -->
+                    <div id="logs" class="space-y-1">
+                        <!-- Los logs aparecerán aquí -->
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Lógico -->
+    <script>
+        // 1. Manejo de subida de archivo
+        document.getElementById('csvFile').addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Mostrar feedback visual de carga
+            document.getElementById('fileInfo').classList.remove('hidden');
+            document.getElementById('fileName').textContent = "Subiendo...";
+
+            try {
+                const response = await fetch('/preview_csv', { method: 'POST', body: formData });
+                const data = await response.json();
+
+                if (data.error) {
+                    alert(data.error);
+                    document.getElementById('fileInfo').classList.add('hidden');
+                } else {
+                    document.getElementById('fileName').textContent = file.name;
+                    document.getElementById('rowCount').textContent = `${data.total_rows} dietéticas detectadas`;
+                    document.getElementById('serverFilePath').value = data.filepath;
+                    
+                    // Rellenar cuerpo ejemplo si está vacío
+                    const bodyField = document.getElementById('body');
+                    if(!bodyField.value) {
+                        bodyField.value = `Hola {nombre},\n\nTe escribo para presentar nuestra nueva línea de Yerba Mate...\n\nSaludos.`;
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Error al subir archivo");
+            }
+        });
+
+        // 2. Iniciar Campaña
+        async function startCampaign() {
+            const filePath = document.getElementById('serverFilePath').value;
+            const emailUser = document.getElementById('email_user').value;
+            const emailPass = document.getElementById('email_pass').value;
+            const smtpHost = document.getElementById('smtp_host').value;
+            const smtpPort = document.getElementById('smtp_port').value;
+            const subject = document.getElementById('subject').value;
+            const body = document.getElementById('body').value;
+
+            if (!filePath || !emailUser || !emailPass) {
+                alert("Por favor carga un archivo y completa tus credenciales de email.");
+                return;
+            }
+
+            // UI Changes
+            const sendBtn = document.getElementById('sendBtn');
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando...';
+            document.getElementById('consoleArea').classList.remove('hidden');
+
+            const formData = new FormData();
+            formData.append('filepath', filePath);
+            formData.append('email_user', emailUser);
+            formData.append('email_pass', emailPass);
+            formData.append('smtp_host', smtpHost);
+            formData.append('smtp_port', smtpPort);
+            formData.append('subject', subject);
+            formData.append('body', body);
+
+            // Consumir el Stream del servidor
+            try {
+                const response = await fetch('/start_campaign', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value, { stream: true });
+                    buffer += chunk;
+                    
+                    // Procesar eventos SSE
+                    const lines = buffer.split('\n\n');
+                    buffer = lines.pop(); // Guardar el resto incompleto
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const jsonStr = line.replace('data: ', '').replace(/'/g, '"'); // Ajuste simple JSON
+                            try {
+                                const data = JSON.parse(jsonStr);
+                                handleStreamData(data);
+                            } catch (e) {
+                                console.log("Stream parsing wait...", e);
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                document.getElementById('logs').innerHTML += `<div class="text-red-500">Error fatal de red: ${err}</div>`;
+                sendBtn.disabled = false;
+                sendBtn.innerText = "Reintentar";
+            }
+        }
+
+        let totalEmails = 0;
+
+        function handleStreamData(data) {
+            const logsDiv = document.getElementById('logs');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+
+            if (data.status === 'start') {
+                totalEmails = data.total;
+                logsDiv.innerHTML = '<div class="text-yellow-400 mb-2">🚀 Iniciando secuencia de envío...</div>';
+            } else if (data.progress) {
+                // Actualizar barra
+                const pct = Math.round((data.progress / totalEmails) * 100);
+                progressBar.style.width = `${pct}%`;
+                progressText.innerText = `${pct}%`;
+                
+                // Agregar log
+                const newLog = document.createElement('div');
+                newLog.innerHTML = data.log;
+                logsDiv.prepend(newLog); // Más reciente arriba
+            } else if (data.status === 'finished') {
+                document.getElementById('sendBtn').innerHTML = '<i class="fa-solid fa-check"></i> Finalizado';
+                document.getElementById('sendBtn').classList.remove('bg-gray-800');
+                document.getElementById('sendBtn').classList.add('bg-green-600');
+                logsDiv.prepend(document.createElement('div').innerHTML = `<div class="text-green-400 font-bold mt-2 border-t border-gray-600 pt-2">✨ RESUMEN: ${data.success} Enviados / ${data.fail} Fallidos</div>`);
+            } else if (data.error) {
+                 logsDiv.innerHTML += `<div class="text-red-500 font-bold bg-red-900/20 p-2 rounded">Error: ${data.error}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>
