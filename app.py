@@ -16,7 +16,7 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # CONFIGURACIÓN GOOGLE MAPS - Reemplaza con tu clave real
 # Nota: La API de Google Maps es necesaria para la búsqueda por zona
-GOOGLE_MAPS_KEY = 'TU_API_KEY_AQUI'
+GOOGLE_MAPS_KEY = 'AIzaSyBGJ8B2z9p52LM-x9vEwxO9pmx8V9w7Ws4'
 try:
     gmaps = googlemaps.Client(key=GOOGLE_MAPS_KEY)
 except:
