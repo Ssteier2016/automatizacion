@@ -3,20 +3,26 @@ import pandas as pd
 import smtplib
 import time
 import random
+import googlemaps
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context
 
 app = Flask(__name__)
 
-# Configuración básica (Idealmente esto iría en variables de entorno en producción)
+# Configuración
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+# CONFIGURACIÓN GOOGLE MAPS - Reemplaza con tu clave real
+# Nota: La API de Google Maps es necesaria para la búsqueda por zona
+GOOGLE_MAPS_KEY = 'TU_API_KEY_AQUI'
+try:
+    gmaps = googlemaps.Client(key=GOOGLE_MAPS_KEY)
+except:
+    gmaps = None
+
 def enviar_correo_real(servidor_smtp, puerto, usuario, password, destinatario, asunto, cuerpo):
-    """
-    Función auxiliar para conectar con el servidor SMTP y enviar el correo.
-    """
     msg = MIMEMultipart()
     msg['From'] = usuario
     msg['To'] = destinatario
@@ -24,9 +30,8 @@ def enviar_correo_real(servidor_smtp, puerto, usuario, password, destinatario, a
     msg.attach(MIMEText(cuerpo, 'plain'))
 
     try:
-        # Detectar si es Gmail o Outlook/Otros para seguridad
         server = smtplib.SMTP(servidor_smtp, puerto)
-        server.starttls() # Seguridad TLS
+        server.starttls()
         server.login(usuario, password)
         server.sendmail(usuario, destinatario, msg.as_string())
         server.quit()
@@ -38,53 +43,77 @@ def enviar_correo_real(servidor_smtp, puerto, usuario, password, destinatario, a
 def index():
     return render_template('index.html')
 
+@app.route('/search_places', methods=['POST'])
+def search_places():
+    """Busca lugares en Google Maps y crea un CSV temporal."""
+    if not gmaps:
+        return jsonify({'error': 'Google Maps API no configurada en el servidor'}), 500
+    
+    data = request.json
+    zona = data.get('zona')
+    if not zona:
+        return jsonify({'error': 'Debes ingresar una zona'}), 400
+
+    query = f"dieteticas en {zona}"
+    
+    try:
+        # Buscar lugares
+        places_result = gmaps.places(query=query)
+        
+        lista_dieteticas = []
+        for place in places_result.get('results', []):
+            info = {
+                'nombre': place.get('name'),
+                'direccion': place.get('formatted_address'),
+                # Google Maps no da emails. Ponemos un placeholder para que el usuario sepa que falta.
+                'email': '' 
+            }
+            lista_dieteticas.append(info)
+        
+        if not lista_dieteticas:
+            return jsonify({'error': 'No se encontraron resultados en esa zona'}), 404
+
+        df = pd.DataFrame(lista_dieteticas)
+        filename = f"busqueda_{int(time.time())}.csv"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        df.to_csv(filepath, index=False)
+        
+        return jsonify({
+            'success': True, 
+            'filepath': filepath, 
+            'total_rows': len(df),
+            'filename': filename,
+            'message': 'Búsqueda completada. IMPORTANTE: Google Maps no provee emails, debes editarlos en el archivo o usar un buscador de mails.'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/preview_csv', methods=['POST'])
 def preview_csv():
-    """Lee el archivo subido y devuelve las primeras filas para confirmar que está bien."""
     if 'file' not in request.files:
         return jsonify({'error': 'No se subió ningún archivo'}), 400
     
     file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'Nombre de archivo vacío'}), 400
-
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
     file.save(filepath)
 
     try:
-        # Detectar formato
-        if filepath.endswith('.csv'):
-            df = pd.read_csv(filepath)
-        elif filepath.endswith('.xlsx'):
-            df = pd.read_excel(filepath)
-        else:
-            return jsonify({'error': 'Formato no soportado. Usa CSV o Excel.'}), 400
-
-        # Normalizar nombres de columnas a minúsculas para evitar errores
+        df = pd.read_csv(filepath) if filepath.endswith('.csv') else pd.read_excel(filepath)
         df.columns = [c.lower().strip() for c in df.columns]
         
-        # Validar columnas requeridas
         if 'email' not in df.columns:
-            return jsonify({'error': 'No se encontró la columna "email" en el archivo.'}), 400
+            return jsonify({'error': 'Falta la columna "email"'}), 400
 
-        # Guardar ruta en sesión o devolverla para usarla en el envío
         return jsonify({
             'success': True, 
-            'columns': list(df.columns),
-            'preview': df.head(5).to_dict(orient='records'),
-            'filepath': filepath,
+            'filepath': filepath, 
             'total_rows': len(df)
         })
-
     except Exception as e:
-        return jsonify({'error': f'Error al leer archivo: {str(e)}'}), 500
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/start_campaign', methods=['POST'])
 def start_campaign():
-    """
-    Endpoint de Streaming. 
-    Mantiene la conexión abierta y envía actualizaciones línea por línea al navegador.
-    """
     data = request.form
     filepath = data.get('filepath')
     email_user = data.get('email_user')
@@ -96,11 +125,7 @@ def start_campaign():
 
     def generate():
         try:
-            if filepath.endswith('.csv'):
-                df = pd.read_csv(filepath)
-            else:
-                df = pd.read_excel(filepath)
-            
+            df = pd.read_csv(filepath) if filepath.endswith('.csv') else pd.read_excel(filepath)
             df.columns = [c.lower().strip() for c in df.columns]
             total = len(df)
 
@@ -111,41 +136,34 @@ def start_campaign():
 
             for index, row in df.iterrows():
                 destinatario = row.get('email')
-                nombre = row.get('nombre', 'Cliente') # Fallback si no hay nombre
+                nombre = row.get('nombre', 'Cliente')
                 
-                if pd.isna(destinatario):
+                if pd.isna(destinatario) or destinatario == '':
+                    log_html = f"<div class='mb-2 p-2 border-b border-gray-700 text-sm text-yellow-500 font-mono'>[{index+1}] Saltado: Sin email</div>"
+                    yield f"data: {{'progress': {index + 1}, 'log': \"{log_html}\"}}\n\n"
                     continue
 
-                # Personalización básica
-                try:
-                    cuerpo_final = body_template.replace('{nombre}', str(nombre))
-                    # Aquí podrías agregar más reemplazos, ej: {empresa}
-                except:
-                    cuerpo_final = body_template
+                # --- Lógica de Pausa Anti-Spam ---
+                # Esperamos un tiempo aleatorio antes de cada envío para parecer humanos
+                tiempo_espera = random.randint(20, 45) # Segundos
+                
+                cuerpo_final = body_template.replace('{nombre}', str(nombre))
 
-                # Simulación de envío (COMENTA ESTO Y DESCOMENTA LO DE ABAJO PARA PRODUCCIÓN)
-                # En producción, usa la función enviar_correo_real
-                time.sleep(1) # Simula retraso de red
-                sent_ok = True 
-                msg_status = "Simulación OK"
-
-                # --- MODO PRODUCCIÓN (Descomentar para usar) ---
-                # sent_ok, msg_status = enviar_correo_real(smtp_host, smtp_port, email_user, email_pass, destinatario, subject_template, cuerpo_final)
-                # time.sleep(random.randint(5, 15)) # Anti-spam delay importante
+                # MODO PRODUCCIÓN
+                sent_ok, msg_status = enviar_correo_real(smtp_host, smtp_port, email_user, email_pass, destinatario, subject_template, cuerpo_final)
                 
                 if sent_ok:
                     success_count += 1
-                    status_color = "text-green-600"
+                    status_color = "text-green-400"
                 else:
                     fail_count += 1
-                    status_color = "text-red-600"
-                    msg_status = f"Error: {msg_status}"
+                    status_color = "text-red-400"
 
-                # Enviar log al frontend
-                log_html = f"<div class='mb-2 p-2 border-b border-gray-100 text-sm'><span class='font-bold'>{index + 1}/{total}</span> - {destinatario}: <span class='{status_color}'>{msg_status}</span></div>"
-                
-                # Formato SSE (Server Sent Events) simple
+                log_html = f"<div class='mb-2 p-2 border-b border-gray-700 text-sm font-mono'><span class='text-gray-500'>[{index+1}/{total}]</span> {destinatario}: <span class='{status_color}'>{msg_status}</span> <span class='text-xs text-gray-600'>(Pausa: {tiempo_espera}s)</span></div>"
                 yield f"data: {{'progress': {index + 1}, 'log': \"{log_html}\"}}\n\n"
+                
+                # Pausamos la ejecución del hilo para este envío
+                time.sleep(tiempo_espera)
 
             yield f"data: {{'status': 'finished', 'success': {success_count}, 'fail': {fail_count}}}\n\n"
 
