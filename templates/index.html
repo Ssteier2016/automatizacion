@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YerbaPromo B2B - Leads Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .brand-gradient { background: linear-gradient(135deg, #064e3b 0%, #059669 100%); }
+        .log-box::-webkit-scrollbar { width: 4px; }
+        .log-box::-webkit-scrollbar-thumb { background: #10b981; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans">
+
+    <nav class="brand-gradient text-white py-4 shadow-2xl border-b border-emerald-800">
+        <div class="container mx-auto px-6 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <i class="fa-solid fa-rocket text-2xl text-emerald-300"></i>
+                <h1 class="font-black text-xl tracking-tighter uppercase">YerbaPromo <span class="font-light">LeadGen</span></h1>
+            </div>
+            <div class="hidden md:block text-[10px] bg-black/40 px-4 py-2 rounded-full border border-emerald-500/30 font-bold uppercase tracking-widest">
+                Modo: Extracción de Email + WhatsApp
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mx-auto px-6 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- Panel Lateral -->
+            <aside class="lg:col-span-4 space-y-6">
+                
+                <!-- PASO 1: BÚSQUEDA -->
+                <div class="bg-slate-800 p-6 rounded-3xl shadow-xl border border-slate-700">
+                    <h3 class="text-xs font-bold text-emerald-400 uppercase tracking-widest mb-4">
+                        <i class="fa-solid fa-magnifying-glass-location mr-2"></i> 1. Buscar Leads Pro
+                    </h3>
+                    <div class="space-y-4">
+                        <div class="flex gap-2">
+                            <input type="text" id="zonaBusqueda" placeholder="Ej: Palermo, CABA" 
+                                class="flex-1 p-3 bg-slate-900 border border-slate-700 rounded-2xl text-sm outline-none focus:border-emerald-500 transition text-white">
+                            <button onclick="buscarEnMaps()" id="btnBuscar" 
+                                class="bg-emerald-600 text-white px-5 rounded-2xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-900/20">
+                                <i class="fa-solid fa-bolt"></i>
+                            </button>
+                        </div>
+                        <div class="text-[10px] space-y-1 text-slate-400">
+                            <p>• Extrae Teléfonos (WhatsApp).</p>
+                            <p>• Escanea sitios web buscando Emails.</p>
+                            <p>• Descarga CSV automático al terminar.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PASO 2: CREDENCIALES -->
+                <div class="bg-slate-800 p-6 rounded-3xl shadow-xl border border-slate-700">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
+                        <i class="fa-solid fa-envelope-shield mr-2"></i> 2. Cuenta Remitente
+                    </h3>
+                    <div class="space-y-4">
+                        <input type="email" id="email_user" placeholder="Tu Gmail" class="w-full p-3 bg-slate-900 border border-slate-700 rounded-2xl text-sm outline-none focus:border-emerald-500 text-white">
+                        <input type="password" id="email_pass" placeholder="App Password (16 dígitos)" class="w-full p-3 bg-slate-900 border border-slate-700 rounded-2xl text-sm outline-none focus:border-emerald-500 text-white">
+                    </div>
+                </div>
+
+                <!-- PASO 3: SUBIDA -->
+                <div class="bg-slate-800 p-6 rounded-3xl shadow-xl border border-slate-700">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
+                        <i class="fa-solid fa-file-import mr-2"></i> 3. Subir Lista Final
+                    </h3>
+                    <div class="relative border-2 border-dashed border-slate-700 rounded-3xl p-6 text-center hover:border-emerald-500 transition cursor-pointer group">
+                        <input type="file" id="csvFile" accept=".csv, .xlsx" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                        <i class="fa-solid fa-file-circle-plus text-3xl text-slate-600 group-hover:text-emerald-500 mb-2"></i>
+                        <p class="text-[10px] font-bold text-slate-500 uppercase">Cargar archivo editado</p>
+                    </div>
+                    <div id="fileInfo" class="hidden mt-4 bg-emerald-900/30 text-emerald-400 p-4 rounded-2xl border border-emerald-500/20 flex items-center justify-between">
+                        <div class="overflow-hidden">
+                            <p class="text-xs font-bold truncate" id="fileName">archivo.csv</p>
+                            <p class="text-[10px] opacity-70" id="rowCount">0 filas</p>
+                        </div>
+                        <i class="fa-solid fa-check-double text-emerald-500"></i>
+                        <input type="hidden" id="serverFilePath">
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Columna de Campaña -->
+            <section class="lg:col-span-8 space-y-6">
+                
+                <!-- REDACCIÓN -->
+                <div class="bg-slate-800 p-8 rounded-3xl shadow-xl border border-slate-700">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-black text-white italic tracking-tighter">Campaña Inteligente</h2>
+                        <div class="flex gap-2">
+                            <span class="text-[10px] bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full border border-emerald-500/20 font-bold">ANTI-SPAM ON</span>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <input type="text" id="subject" value="Propuesta exclusiva para {nombre}" 
+                            class="w-full text-lg font-bold bg-transparent border-b-2 border-slate-700 py-2 outline-none focus:border-emerald-500 transition text-white">
+                        
+                        <div class="relative">
+                            <textarea id="body" rows="10" 
+                                class="w-full p-6 bg-slate-900/50 border border-slate-700 rounded-3xl outline-none focus:border-emerald-500 text-slate-300 resize-none leading-relaxed"
+                                placeholder="Hola {nombre}, te escribo porque vi tu local..."></textarea>
+                            <div class="absolute bottom-4 right-6 text-[10px] text-slate-500 font-mono uppercase">
+                                Tag: {nombre}
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col md:flex-row justify-between items-center pt-4 gap-4">
+                            <p class="text-xs text-slate-500 text-center md:text-left">
+                                <i class="fa-solid fa-shield-virus mr-2"></i> El servidor enviará los correos con un intervalo humano de 20-45s.
+                            </p>
+                            <button onclick="startCampaign()" id="sendBtn" 
+                                class="w-full md:w-auto bg-emerald-600 text-white px-12 py-4 rounded-2xl hover:bg-emerald-500 transition-all shadow-xl shadow-emerald-900/20 font-black uppercase tracking-tighter flex items-center justify-center gap-3">
+                                <i class="fa-solid fa-paper-plane"></i> Enviar a Dietéticas
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TERMINAL LOGS -->
+                <div id="consoleArea" class="hidden bg-black rounded-3xl overflow-hidden shadow-2xl border border-slate-800">
+                    <div class="bg-slate-900 px-6 py-3 flex justify-between items-center border-b border-white/5">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                            <span class="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></span> Live Delivery Output
+                        </span>
+                        <span id="progressText" class="text-emerald-400 font-mono font-bold text-sm">0%</span>
+                    </div>
+                    <div class="bg-slate-800 h-1">
+                        <div id="progressBar" class="bg-emerald-500 h-full transition-all duration-700" style="width: 0%"></div>
+                    </div>
+                    <div id="logs" class="p-6 h-80 overflow-y-auto text-emerald-500/80 font-mono text-[11px] log-box bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]">
+                        <!-- Logs dinámicos -->
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        async function buscarEnMaps() {
+            const zona = document.getElementById('zonaBusqueda').value;
+            const btn = document.getElementById('btnBuscar');
+            if(!zona) return alert("Ingresa una zona (Ej: Moron, Buenos Aires).");
+            
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+
+            try {
+                const res = await fetch('/search_places', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({zona: zona})
+                });
+                const data = await res.json();
+                if(data.error) throw new Error(data.error);
+
+                // DESCARGA AUTOMÁTICA
+                window.location.href = '/download/' + data.filename;
+                
+                document.getElementById('fileInfo').classList.remove('hidden');
+                document.getElementById('fileName').textContent = data.filename;
+                document.getElementById('rowCount').textContent = `${data.total_rows} potenciales clientes`;
+                document.getElementById('serverFilePath').value = data.filepath;
+                
+                setTimeout(() => {
+                    alert("¡Extracción Pro Completa! El archivo tiene WhatsApp y los emails encontrados. Revisa tu carpeta de Descargas.");
+                }, 1000);
+            } catch(e) { alert("Error: " + e.message); }
+            finally { 
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-bolt"></i>';
+            }
+        }
+
+        document.getElementById('csvFile').addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const res = await fetch('/preview_csv', { method: 'POST', body: formData });
+                const data = await res.json();
+                if(data.error) throw new Error(data.error);
+                document.getElementById('fileInfo').classList.remove('hidden');
+                document.getElementById('fileName').textContent = file.name;
+                document.getElementById('serverFilePath').value = data.filepath;
+            } catch(e) { alert(e.message); }
+        });
+
+        async function startCampaign() {
+            const filePath = document.getElementById('serverFilePath').value;
+            const emailUser = document.getElementById('email_user').value;
+            const emailPass = document.getElementById('email_pass').value;
+            if(!filePath || !emailUser || !emailPass) return alert("Faltan datos de configuración.");
+
+            const sendBtn = document.getElementById('sendBtn');
+            const logsDiv = document.getElementById('logs');
+            const progressBar = document.getElementById('progressBar');
+
+            document.getElementById('consoleArea').classList.remove('hidden');
+            sendBtn.disabled = true;
+            logsDiv.innerHTML = '<div class="text-white">> Inicializando motor de envío masivo...</div>';
+
+            const formData = new FormData();
+            formData.append('filepath', filePath);
+            formData.append('email_user', emailUser);
+            formData.append('email_pass', emailPass);
+            formData.append('subject', document.getElementById('subject').value);
+            formData.append('body', document.getElementById('body').value);
+            formData.append('smtp_host', 'smtp.gmail.com');
+            formData.append('smtp_port', '587');
+
+            try {
+                const response = await fetch('/start_campaign', { method: 'POST', body: formData });
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let totalEmails = 0;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n\n');
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        const cleanJson = line.replace('data: ', '').replace(/'/g, '"');
+                        const data = JSON.parse(cleanJson);
+                        if(data.status === 'start') totalEmails = data.total;
+                        if(data.progress) {
+                            const pct = Math.round((data.progress / totalEmails) * 100);
+                            progressBar.style.width = `${pct}%`;
+                            document.getElementById('progressText').innerText = `${pct}%`;
+                            const log = document.createElement('div');
+                            log.innerHTML = data.log;
+                            logsDiv.prepend(log);
+                        }
+                        if(data.status === 'finished') {
+                            sendBtn.innerHTML = '<i class="fa-solid fa-check-circle"></i> Campaña Finalizada';
+                            sendBtn.classList.replace('bg-emerald-600', 'bg-blue-600');
+                        }
+                    }
+                }
+            } catch(e) { alert("Error de conexión con el servidor."); }
+        }
+    </script>
+</body>
+</html>
+
