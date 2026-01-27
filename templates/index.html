@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YerbaPromo B2B - Leads & Ventas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); }
+        .btn-wa { background: #25D366; }
+        .btn-wa:hover { background: #128C7E; }
+        .custom-scroll::-webkit-scrollbar { width: 5px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-200 font-sans min-h-screen">
+
+    <nav class="border-b border-slate-800 bg-slate-900/50 sticky top-0 z-50">
+        <div class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-emerald-500 rounded-xl">
+                    <i class="fa-solid fa-store text-white text-xl"></i>
+                </div>
+                <h1 class="text-xl font-black tracking-tighter uppercase">YerbaPromo <span class="text-emerald-500">B2B</span></h1>
+            </div>
+            <div id="statusIndicator" class="text-[10px] font-bold uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                <span class="w-2 h-2 bg-slate-700 rounded-full"></span> Sistema en espera
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mx-auto px-6 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- Columna de Configuración (4 cols) -->
+            <aside class="lg:col-span-4 space-y-6">
+                
+                <!-- Búsqueda -->
+                <div class="glass p-6 rounded-3xl border border-slate-700">
+                    <h3 class="text-xs font-black text-emerald-500 uppercase tracking-widest mb-4">Extracción de Zona</h3>
+                    <div class="flex gap-2">
+                        <input type="text" id="zonaBusqueda" placeholder="Ej: Morón, Buenos Aires" 
+                            class="flex-1 p-3 bg-slate-800 border border-slate-700 rounded-2xl text-sm focus:border-emerald-500 outline-none transition">
+                        <button onclick="buscarEnMaps()" id="btnBuscar" class="bg-emerald-600 px-5 rounded-2xl hover:bg-emerald-500 transition">
+                            <i class="fa-solid fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Credenciales -->
+                <div class="glass p-6 rounded-3xl border border-slate-700">
+                    <h3 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Credenciales SMTP</h3>
+                    <div class="space-y-3">
+                        <input type="email" id="email_user" placeholder="Tu Gmail" class="w-full p-3 bg-slate-800 border border-slate-700 rounded-2xl text-sm outline-none focus:border-emerald-500">
+                        <input type="password" id="email_pass" placeholder="App Password" class="w-full p-3 bg-slate-800 border border-slate-700 rounded-2xl text-sm outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+
+                <!-- Redactor WhatsApp -->
+                <div class="bg-emerald-900/10 p-6 rounded-3xl border border-emerald-500/20">
+                    <h3 class="text-xs font-black text-emerald-500 uppercase tracking-widest mb-4">Template WhatsApp</h3>
+                    <textarea id="waBody" rows="4" class="w-full p-4 bg-slate-900 border border-emerald-500/20 rounded-2xl text-xs outline-none focus:border-emerald-500 resize-none"
+                        placeholder="Hola {nombre}, vi tu dietética en Google Maps y me gustaría presentarte...">Hola {nombre}, ¿cómo estás? Te escribo de YerbaPromo...</textarea>
+                </div>
+
+                <!-- Redactor Email -->
+                <div class="bg-blue-900/10 p-6 rounded-3xl border border-blue-500/20">
+                    <h3 class="text-xs font-black text-blue-400 uppercase tracking-widest mb-4">Template Email</h3>
+                    <div class="space-y-3">
+                        <input type="text" id="emailSubject" value="Propuesta para {nombre}" class="w-full p-3 bg-slate-900 border border-blue-500/20 rounded-xl text-xs outline-none">
+                        <textarea id="emailBody" rows="4" class="w-full p-4 bg-slate-900 border border-blue-500/20 rounded-2xl text-xs outline-none focus:border-blue-500 resize-none">Hola {nombre}, es un gusto saludarlos...</textarea>
+                        <input type="text" id="emailImage" placeholder="URL de Imagen (Opcional)" class="w-full p-3 bg-slate-900 border border-blue-500/20 rounded-xl text-xs outline-none">
+                    </div>
+                </div>
+
+                <button onclick="startEmailCampaign()" id="btnCampaign" class="w-full bg-slate-100 text-slate-900 font-black py-4 rounded-2xl hover:bg-white transition flex items-center justify-center gap-3">
+                    <i class="fa-solid fa-envelopes-bulk"></i> ENVIAR MAILS MASIVOS
+                </button>
+            </aside>
+
+            <!-- Columna de Resultados (8 cols) -->
+            <section class="lg:col-span-8 space-y-6">
+                
+                <!-- Tabla de Resultados -->
+                <div class="glass rounded-3xl border border-slate-700 overflow-hidden">
+                    <div class="p-6 border-b border-slate-700 flex justify-between items-center">
+                        <h2 class="text-lg font-bold">Dietéticas Encontradas</h2>
+                        <a id="btnDownload" class="hidden text-xs bg-slate-700 px-4 py-2 rounded-full hover:bg-slate-600 transition cursor-pointer">
+                            <i class="fa-solid fa-download mr-1"></i> Descargar CSV
+                        </a>
+                    </div>
+                    <div class="max-h-[400px] overflow-y-auto custom-scroll">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-slate-800/50 text-[10px] uppercase text-slate-500 sticky top-0">
+                                <tr>
+                                    <th class="px-6 py-3">Nombre</th>
+                                    <th class="px-6 py-3">WhatsApp</th>
+                                    <th class="px-6 py-3">Email</th>
+                                </tr>
+                            </thead>
+                            <tbody id="leadsTable" class="divide-y divide-slate-800">
+                                <!-- Filas dinámicas -->
+                                <tr>
+                                    <td colspan="3" class="px-6 py-12 text-center text-slate-600 italic">Busca una zona para ver los resultados...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Consola de Progreso Email -->
+                <div id="consoleArea" class="hidden glass rounded-3xl border border-slate-700 overflow-hidden shadow-2xl">
+                    <div class="bg-slate-800/80 px-6 py-3 flex justify-between items-center">
+                        <span class="text-[10px] font-bold text-emerald-400">LOG DE ENVÍO MASIVO</span>
+                        <span id="progressText" class="text-xs font-mono">0%</span>
+                    </div>
+                    <div id="logs" class="p-6 h-48 overflow-y-auto text-[10px] font-mono text-slate-400 custom-scroll space-y-1">
+                        <!-- Logs dinámicos -->
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        let currentLeads = [];
+        let currentFilepath = "";
+
+        async function buscarEnMaps() {
+            const zona = document.getElementById('zonaBusqueda').value;
+            const btn = document.getElementById('btnBuscar');
+            if(!zona) return alert("Ingresa una zona.");
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            document.getElementById('statusIndicator').innerHTML = '<span class="w-2 h-2 bg-amber-500 rounded-full animate-ping"></span> Extrayendo datos...';
+
+            try {
+                const res = await fetch('/search_places', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({zona})
+                });
+                const data = await res.json();
+                if(data.error) throw new Error(data.error);
+
+                currentLeads = data.leads;
+                currentFilepath = data.filepath;
+                
+                // Actualizar Tabla
+                const tbody = document.getElementById('leadsTable');
+                tbody.innerHTML = "";
+                
+                currentLeads.forEach((lead, index) => {
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-slate-800/30 transition";
+                    
+                    // Lógica de WhatsApp
+                    const msgWA = encodeURIComponent(document.getElementById('waBody').value.replace('{nombre}', lead.nombre));
+                    const waLink = lead.telefono ? `https://wa.me/${lead.telefono}?text=${msgWA}` : null;
+                    
+                    tr.innerHTML = `
+                        <td class="px-6 py-4">
+                            <div class="font-bold text-white text-xs">${lead.nombre}</div>
+                            <div class="text-[10px] text-slate-500 truncate max-w-[150px]">${lead.direccion}</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            ${waLink ? `
+                                <a href="${waLink}" target="_blank" class="btn-wa text-white px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-2 w-fit">
+                                    <i class="fa-brands fa-whatsapp"></i> Chat Directo
+                                </a>
+                            ` : `<span class="text-slate-600 text-[10px]">Sin teléfono</span>`}
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-mono ${lead.email ? 'text-blue-400' : 'text-slate-600'}">${lead.email || 'No encontrado'}</span>
+                                ${lead.email ? `<i class="fa-solid fa-circle-check text-blue-500 text-[8px]"></i>` : ''}
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                // Activar botón de descarga
+                const btnDown = document.getElementById('btnDownload');
+                btnDown.href = `/download/${data.filename}`;
+                btnDown.classList.remove('hidden');
+
+                document.getElementById('statusIndicator').innerHTML = '<span class="w-2 h-2 bg-emerald-500 rounded-full"></span> Búsqueda terminada';
+
+            } catch(e) { 
+                alert(e.message);
+                document.getElementById('statusIndicator').innerHTML = '<span class="w-2 h-2 bg-red-500 rounded-full"></span> Error';
+            } finally { 
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-search"></i>';
+            }
+        }
+
+        async function startEmailCampaign() {
+            if(!currentFilepath) return alert("Primero realiza una búsqueda.");
+            const user = document.getElementById('email_user').value;
+            const pass = document.getElementById('email_pass').value;
+            if(!user || !pass) return alert("Configura tus credenciales de Email.");
+
+            const btn = document.getElementById('btnCampaign');
+            const logsDiv = document.getElementById('logs');
+            btn.disabled = true;
+            btn.innerText = "PROCESANDO ENVÍOS...";
+            document.getElementById('consoleArea').classList.remove('hidden');
+            logsDiv.innerHTML = "<div>> Iniciando motor de campaña...</div>";
+
+            const formData = new FormData();
+            formData.append('filepath', currentFilepath);
+            formData.append('email_user', user);
+            formData.append('email_pass', pass);
+            formData.append('subject', document.getElementById('emailSubject').value);
+            formData.append('body', document.getElementById('emailBody').value);
+            formData.append('image_url', document.getElementById('emailImage').value);
+
+            try {
+                const response = await fetch('/start_campaign', { method: 'POST', body: formData });
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let total = 0;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n\n');
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        const data = JSON.parse(line.replace('data: ', '').replace(/'/g, '"'));
+                        
+                        if(data.status === 'start') total = data.total;
+                        if(data.progress) {
+                            const pct = Math.round((data.progress / total) * 100);
+                            document.getElementById('progressText').innerText = `${pct}%`;
+                            const log = document.createElement('div');
+                            log.innerHTML = `> ${data.log}`;
+                            logsDiv.prepend(log);
+                        }
+                        if(data.status === 'finished') {
+                            btn.innerText = "CAMPAÑA TERMINADA";
+                            btn.classList.replace('bg-slate-100', 'bg-emerald-600');
+                        }
+                    }
+                }
+            } catch(e) { alert("Error de conexión."); }
+        }
+    </script>
+</body>
+</html>
+
