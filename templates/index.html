@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soberanía B2B - CRM Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .sidebar-dark { background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); }
+        .custom-scroll::-webkit-scrollbar { width: 5px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #10b981; border-radius: 10px; }
+        input[type="checkbox"] { accent-color: #10b981; width: 18px; height: 18px; cursor: pointer; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-200 min-h-screen font-sans">
+
+    <nav class="border-b border-emerald-900/30 bg-slate-900/50 sticky top-0 z-50 backdrop-blur-md">
+        <div class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-emerald-600 rounded-xl">
+                    <i class="fa-solid fa-leaf text-white text-xl"></i>
+                </div>
+                <h1 class="text-xl font-black tracking-tighter uppercase">Soberanía <span class="text-emerald-500">B2B</span></h1>
+            </div>
+            <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-800 px-4 py-2 rounded-full border border-slate-700">
+                Sistema de Prospección Inteligente
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mx-auto px-6 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- Panel Lateral de Control -->
+            <aside class="lg:col-span-4 space-y-6">
+                
+                <!-- 1. Búsqueda -->
+                <div class="sidebar-dark p-6 rounded-3xl border border-slate-800 shadow-2xl">
+                    <h3 class="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-4">1. Localizar Zonas</h3>
+                    <div class="flex gap-2">
+                        <input type="text" id="zonaBusqueda" placeholder="Ej: Palermo, Buenos Aires" 
+                            class="flex-1 p-3 bg-slate-900 border border-slate-800 rounded-2xl text-sm focus:border-emerald-500 outline-none transition">
+                        <button onclick="buscarEnMaps()" id="btnBuscar" class="bg-emerald-600 px-5 rounded-2xl hover:bg-emerald-500 transition">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 2. Credenciales -->
+                <div class="sidebar-dark p-6 rounded-3xl border border-slate-800 shadow-xl">
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">2. Acceso Gmail</h3>
+                    <div class="space-y-3">
+                        <input type="email" id="email_user" value="lewczukjuani@gmail.com" class="w-full p-3 bg-slate-900 border border-slate-800 rounded-2xl text-xs outline-none">
+                        <input type="password" id="email_pass" placeholder="App Password (16 letras)" class="w-full p-3 bg-slate-900 border border-slate-800 rounded-2xl text-xs outline-none focus:border-emerald-500">
+                        <p class="text-[9px] text-slate-500 italic px-1">Usa el código de 16 caracteres generado en tu cuenta Google.</p>
+                    </div>
+                </div>
+
+                <!-- 3. Visualización de Producto -->
+                <div class="sidebar-dark p-6 rounded-3xl border border-slate-800 shadow-xl">
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">3. Imagen Adjunta</h3>
+                    <img src="https://raw.githubusercontent.com/Ssteier2016/automatizacion/main/producto.png" class="w-full h-32 object-contain bg-black/40 rounded-2xl border border-slate-800 mb-3">
+                    <input type="text" id="emailImage" value="https://github.com/Ssteier2016/automatizacion/blob/main/producto.png" class="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-[8px] text-slate-600 outline-none">
+                </div>
+
+                <button onclick="startCampaign()" id="btnCampaign" class="w-full bg-white text-slate-950 font-black py-4 rounded-2xl hover:bg-emerald-400 transition shadow-2xl flex items-center justify-center gap-3 uppercase tracking-tighter">
+                    <i class="fa-solid fa-paper-plane"></i> Enviar a Seleccionados
+                </button>
+            </aside>
+
+            <!-- Área de Resultados -->
+            <section class="lg:col-span-8 space-y-6">
+                
+                <div class="sidebar-dark rounded-3xl border border-slate-800 overflow-hidden shadow-2xl">
+                    <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                        <div class="flex items-center gap-4">
+                            <input type="checkbox" id="selectAll" onclick="toggleSelectAll()">
+                            <h2 class="text-xs font-bold uppercase tracking-widest text-slate-400">Seleccionar Todo / Resultados</h2>
+                        </div>
+                        <div id="statusTag" class="text-[9px] font-bold text-slate-500">LISTO</div>
+                    </div>
+
+                    <div class="max-h-[500px] overflow-y-auto custom-scroll">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-900 text-[9px] uppercase text-slate-600 font-black sticky top-0">
+                                <tr>
+                                    <th class="px-6 py-4 w-10"></th>
+                                    <th class="px-6 py-4">Dietética / Comercio</th>
+                                    <th class="px-6 py-4">Web / Redes</th>
+                                    <th class="px-6 py-4 text-center">Email Detectado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="leadsTable" class="divide-y divide-slate-800/50">
+                                <tr>
+                                    <td colspan="4" class="px-6 py-20 text-center text-slate-600 italic">Ingresa una zona para extraer clientes potenciales...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Consola de Progreso -->
+                <div id="consoleArea" class="hidden sidebar-dark rounded-3xl border border-slate-800 overflow-hidden shadow-2xl font-mono">
+                    <div class="bg-black/40 px-6 py-3 flex justify-between items-center border-b border-white/5">
+                        <span class="text-[9px] font-bold text-emerald-500 uppercase tracking-widest flex items-center gap-2">
+                            <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> Ejecutando Campaña Yerba Soberanía
+                        </span>
+                        <span id="progressText" class="text-[10px] text-slate-500">0%</span>
+                    </div>
+                    <div id="logs" class="p-6 h-40 overflow-y-auto text-[10px] text-slate-400 custom-scroll space-y-1 bg-black/20"></div>
+                </div>
+
+            </section>
+        </div>
+    </main>
+
+    <script>
+        let currentLeads = [];
+
+        async function buscarEnMaps() {
+            const zona = document.getElementById('zonaBusqueda').value;
+            const btn = document.getElementById('btnBuscar');
+            if(!zona) return alert("Escribe una zona.");
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            document.getElementById('statusTag').innerText = "RASTREANDO WEB Y REDES...";
+
+            try {
+                const res = await fetch('/search_places', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({zona})
+                });
+                const data = await res.json();
+                if(data.error) throw new Error(data.error);
+
+                currentLeads = data.leads;
+                renderTable();
+                document.getElementById('statusTag').innerText = "BÚSQUEDA COMPLETA";
+            } catch(e) { alert(e.message); }
+            finally { 
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i>';
+            }
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('leadsTable');
+            tbody.innerHTML = "";
+            currentLeads.forEach((lead) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-900/40 transition group";
+                
+                let socialsHtml = "";
+                lead.socials.forEach(s => {
+                    const icon = s.platform === 'ig' ? 'fa-instagram' : 'fa-facebook';
+                    socialsHtml += `<a href="${s.url}" target="_blank" class="mr-2 text-slate-500 hover:text-emerald-400"><i class="fa-brands ${icon}"></i></a>`;
+                });
+
+                tr.innerHTML = `
+                    <td class="px-6 py-4">
+                        <input type="checkbox" class="lead-check" data-id="${lead.id}" ${lead.email ? 'checked' : ''}>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="font-bold text-slate-200">${lead.nombre}</div>
+                        <div class="text-[10px] text-slate-600 truncate max-w-[200px]">${lead.direccion}</div>
+                    </td>
+                    <td class="px-6 py-4">
+                        ${lead.web ? `<a href="${lead.web}" target="_blank" class="text-emerald-500 underline mr-2">Web</a>` : ''}
+                        ${socialsHtml}
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        <span class="text-[10px] font-mono ${lead.email ? 'text-emerald-400 font-bold border border-emerald-900/50 px-2 py-1 rounded' : 'text-slate-700'}">${lead.email || 'No hallado'}</span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function toggleSelectAll() {
+            const master = document.getElementById('selectAll');
+            const checks = document.querySelectorAll('.lead-check');
+            checks.forEach(c => c.checked = master.checked);
+        }
+
+        async function startCampaign() {
+            const user = document.getElementById('email_user').value;
+            const pass = document.getElementById('email_pass').value;
+            if(!pass) return alert("Pega la contraseña de aplicación de Gmail.");
+
+            const selected = [];
+            const checks = document.querySelectorAll('.lead-check:checked');
+            checks.forEach(c => {
+                const lead = currentLeads.find(l => l.id === c.dataset.id);
+                if(lead && lead.email) selected.push(lead);
+            });
+
+            if(selected.length === 0) return alert("Selecciona al menos una dietética con email válido.");
+
+            const btn = document.getElementById('btnCampaign');
+            const logsDiv = document.getElementById('logs');
+            btn.disabled = true;
+            btn.innerText = "ENVIANDO PROPUESTAS...";
+            document.getElementById('consoleArea').classList.remove('hidden');
+
+            const formData = new FormData();
+            formData.append('selected_leads', JSON.stringify(selected));
+            formData.append('email_user', user);
+            formData.append('email_pass', pass);
+            formData.append('image_url', document.getElementById('emailImage').value);
+
+            try {
+                const response = await fetch('/start_campaign', { method: 'POST', body: formData });
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let total = 0;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n\n');
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        const data = JSON.parse(line.replace('data: ', '').replace(/'/g, '"'));
+                        if(data.status === 'start') total = data.total;
+                        if(data.progress) {
+                            const pct = Math.round((data.progress / total) * 100);
+                            document.getElementById('progressText').innerText = `${pct}%`;
+                            const log = document.createElement('div');
+                            log.innerHTML = `> ${data.log}`;
+                            logsDiv.prepend(log);
+                        }
+                        if(data.status === 'finished') {
+                            btn.innerText = "CAMPAÑA TERMINADA";
+                            btn.className = "w-full bg-emerald-600 text-white font-black py-4 rounded-2xl";
+                        }
+                    }
+                }
+            } catch(e) { alert("Conexión perdida."); }
+        }
+    </script>
+</body>
+</html>
+
