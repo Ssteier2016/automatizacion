@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soberanía B2B - Automatización Email</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .brand-glass { background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(12px); }
+        .custom-scroll::-webkit-scrollbar { width: 5px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #10b981; border-radius: 10px; }
+        .btn-brand { background: white; color: #0f172a; transition: all 0.3s; }
+        .btn-brand:hover { background: #10b981; color: white; transform: translateY(-2px); }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans selection:bg-emerald-500/30">
+
+    <!-- Header -->
+    <nav class="border-b border-emerald-900/40 bg-slate-900/50 sticky top-0 z-50 backdrop-blur-md">
+        <div class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-emerald-600 rounded-2xl shadow-lg shadow-emerald-500/20">
+                    <i class="fa-solid fa-leaf text-white text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-black tracking-tighter uppercase leading-none">Yerba Mate <span class="text-emerald-500">Soberanía</span></h1>
+                    <span class="text-[9px] text-slate-500 font-bold tracking-widest uppercase italic">Sistema de Expansión Nacional</span>
+                </div>
+            </div>
+            <div id="statusTag" class="hidden md:flex items-center gap-2 text-[10px] font-bold px-4 py-1.5 rounded-full bg-slate-800 border border-slate-700 text-slate-400">
+                <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> MOTOR DE BÚSQUEDA PROFUNDO ACTIVO
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mx-auto px-6 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- Panel Lateral (4 cols) -->
+            <aside class="lg:col-span-4 space-y-6">
+                
+                <!-- Búsqueda -->
+                <div class="brand-glass p-6 rounded-3xl border border-slate-800 shadow-2xl">
+                    <h3 class="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-4">1. Localización de Dietéticas</h3>
+                    <div class="flex gap-2">
+                        <input type="text" id="zonaBusqueda" placeholder="Ej: Rosario, Santa Fe" 
+                            class="flex-1 p-3 bg-slate-900 border border-slate-800 rounded-2xl text-sm focus:border-emerald-500 outline-none transition">
+                        <button onclick="buscarEnMaps()" id="btnBuscar" class="bg-emerald-600 px-6 rounded-2xl hover:bg-emerald-500 transition shadow-lg">
+                            <i class="fa-solid fa-search"></i>
+                        </button>
+                    </div>
+                    <p class="text-[9px] text-slate-500 mt-3 italic">* El motor entrará a cada web encontrada para buscar el email de contacto.</p>
+                </div>
+
+                <!-- Credenciales SMTP -->
+                <div class="brand-glass p-6 rounded-3xl border border-slate-800 shadow-xl">
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">2. Configuración del Remitente</h3>
+                    <div class="space-y-3">
+                        <input type="email" id="email_user" value="lewczukjuani@gmail.com" class="w-full p-3 bg-slate-900 border border-slate-800 rounded-2xl text-xs outline-none focus:border-emerald-500">
+                        <input type="password" id="email_pass" placeholder="Pega aquí tu App Password de Gmail" class="w-full p-3 bg-slate-900 border border-slate-800 rounded-2xl text-xs outline-none focus:border-emerald-500 border-dashed">
+                        <div class="bg-emerald-900/10 p-3 rounded-xl border border-emerald-500/20 text-[9px] text-emerald-400">
+                            <i class="fa-solid fa-lock mr-1"></i> Tus credenciales se usan solo para esta sesión de envío.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Imagen del Producto -->
+                <div class="brand-glass p-6 rounded-3xl border border-slate-800 shadow-xl overflow-hidden">
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">3. Imagen Adjunta</h3>
+                    <div class="relative group">
+                        <img src="https://raw.githubusercontent.com/Ssteier2016/automatizacion/main/producto.png" 
+                             onerror="this.src='https://via.placeholder.com/150?text=Soberania+Mate'"
+                             class="w-full h-32 object-contain bg-slate-900 rounded-2xl border border-slate-800 mb-3">
+                        <input type="text" id="emailImage" value="https://github.com/Ssteier2016/automatizacion/blob/main/producto.png" 
+                               class="w-full p-2 bg-slate-900 border border-slate-800 rounded-xl text-[8px] text-slate-500 outline-none">
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Panel Central/Derecha (8 cols) -->
+            <section class="lg:col-span-8 space-y-6">
+                
+                <!-- Redactor de Propuesta -->
+                <div class="brand-glass p-8 rounded-3xl border border-emerald-500/20 shadow-2xl">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-black text-white italic tracking-tighter">Propuesta Yerba Mate Soberanía</h2>
+                        <span class="text-[9px] bg-blue-500/10 text-blue-400 px-3 py-1 rounded-full border border-blue-500/20 font-bold uppercase">Email Masivo PRO</span>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-[9px] font-black text-slate-500 uppercase ml-2 mb-1 block">Asunto</label>
+                            <input type="text" id="emailSubject" value="Propuesta Mayorista: Yerba Mate Soberanía para {nombre}" 
+                                class="w-full text-md font-bold bg-transparent border-b border-slate-700 py-2 outline-none focus:border-emerald-500 transition text-white">
+                        </div>
+                        
+                        <div>
+                            <label class="text-[9px] font-black text-slate-500 uppercase ml-2 mb-1 block">Cuerpo del mensaje</label>
+                            <textarea id="emailBody" rows="14" 
+                                class="w-full p-6 bg-slate-900/50 border border-slate-800 rounded-3xl outline-none focus:border-emerald-500 text-slate-300 text-sm leading-relaxed custom-scroll">Hola {nombre}, buen día:
+
+Mi nombre es Juan Ignacio Lewczuk y me comunico para ofrecerles Yerba Mate Soberanía para venta por mayor en dietéticas y comercios naturales.
+
+Trabajamos con una yerba de origen misionero, de excelente calidad, estacionada, con muy buena aceptación por parte de los consumidores que buscan un producto tradicional y confiable.
+
+Ofrecemos:
+
+✅ Precios mayoristas competitivos
+✅ Abastecimiento constante
+✅ Formatos ideales para dietéticas
+✅ Posibilidad de compras recurrentes
+
+Quedo a disposición para enviarles lista de precios, condiciones de venta o coordinar un primer pedido de prueba.
+
+Muchas gracias por su tiempo.
+
+Saludos cordiales,
+Juan Ignacio Lewczuk
+📱 WhatsApp: 11 3134-4552
+✉️ Email: lewczukjuani@gmail.com</textarea>
+                        </div>
+
+                        <div class="flex justify-end pt-4">
+                            <button onclick="startCampaign()" id="btnCampaign" 
+                                class="btn-brand px-12 py-4 rounded-2xl shadow-xl font-black uppercase tracking-tighter flex items-center gap-3">
+                                <i class="fa-solid fa-paper-plane"></i> Lanzar Campaña Masiva
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resultados -->
+                <div class="grid grid-cols-1 gap-6">
+                    <div class="brand-glass rounded-3xl border border-slate-800 overflow-hidden">
+                        <div class="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                            <h2 class="text-xs font-bold uppercase tracking-widest text-slate-400">Prospectos Filtrados</h2>
+                            <a id="btnDownload" class="hidden text-[9px] bg-slate-800 border border-slate-700 px-4 py-2 rounded-full hover:bg-slate-700 transition font-bold uppercase">Descargar CSV</a>
+                        </div>
+                        <div class="max-h-[300px] overflow-y-auto custom-scroll">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-slate-900/80 text-[9px] uppercase text-slate-600 font-black sticky top-0">
+                                    <tr>
+                                        <th class="px-6 py-4">Comercio</th>
+                                        <th class="px-6 py-4">Ubicación</th>
+                                        <th class="px-6 py-4 text-center">Email Detectado</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="leadsTable" class="divide-y divide-slate-800/50">
+                                    <tr><td colspan="3" class="px-6 py-12 text-center text-slate-600 italic">Ingresa una zona para comenzar...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Logs -->
+                    <div id="consoleArea" class="hidden brand-glass rounded-3xl border border-slate-800 overflow-hidden shadow-2xl">
+                        <div class="bg-slate-900/80 px-6 py-3 flex justify-between items-center border-b border-white/5 font-mono">
+                            <span class="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Monitor de Salida</span>
+                            <span id="progressText" class="text-[10px] font-bold text-slate-500">0%</span>
+                        </div>
+                        <div id="logs" class="p-6 h-36 overflow-y-auto text-[10px] font-mono text-slate-400 custom-scroll space-y-1 bg-black/20"></div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        let currentLeads = [];
+        let currentFilepath = "";
+
+        async function buscarEnMaps() {
+            const zona = document.getElementById('zonaBusqueda').value;
+            const btn = document.getElementById('btnBuscar');
+            if(!zona) return alert("Escribe una zona.");
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+
+            try {
+                const res = await fetch('/search_places', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({zona})
+                });
+                const data = await res.json();
+                if(data.error) throw new Error(data.error);
+
+                currentLeads = data.leads;
+                currentFilepath = data.filepath;
+                
+                const tbody = document.getElementById('leadsTable');
+                tbody.innerHTML = "";
+                
+                currentLeads.forEach((lead) => {
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-slate-900/40 transition group";
+                    tr.innerHTML = `
+                        <td class="px-6 py-4 font-bold text-slate-200">${lead.nombre}</td>
+                        <td class="px-6 py-4 text-slate-500 truncate max-w-[200px]">${lead.direccion}</td>
+                        <td class="px-6 py-4 text-center">
+                            <span class="text-[10px] font-mono ${lead.email ? 'text-emerald-400 font-bold' : 'text-slate-700'}">${lead.email || 'No hallado'}</span>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                document.getElementById('btnDownload').href = `/download/${data.filename}`;
+                document.getElementById('btnDownload').classList.remove('hidden');
+
+            } catch(e) { alert(e.message); }
+            finally { 
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-search"></i>';
+            }
+        }
+
+        async function startCampaign() {
+            if(!currentFilepath) return alert("Primero realiza una búsqueda.");
+            const user = document.getElementById('email_user').value;
+            const pass = document.getElementById('email_pass').value;
+            if(!pass) return alert("Ingresa tu contraseña de aplicación de Gmail.");
+
+            const btn = document.getElementById('btnCampaign');
+            const logsDiv = document.getElementById('logs');
+            btn.disabled = true;
+            btn.innerText = "PROCESANDO ENVÍOS...";
+            document.getElementById('consoleArea').classList.remove('hidden');
+            logsDiv.innerHTML = "<div>> Iniciando motor Yerba Soberanía...</div>";
+
+            const formData = new FormData();
+            formData.append('filepath', currentFilepath);
+            formData.append('email_user', user);
+            formData.append('email_pass', pass);
+            formData.append('subject', document.getElementById('emailSubject').value);
+            formData.append('body', document.getElementById('emailBody').value);
+            formData.append('image_url', document.getElementById('emailImage').value);
+
+            try {
+                const response = await fetch('/start_campaign', { method: 'POST', body: formData });
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let total = 0;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n\n');
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        const data = JSON.parse(line.replace('data: ', '').replace(/'/g, '"'));
+                        if(data.status === 'start') total = data.total;
+                        if(data.progress) {
+                            const pct = Math.round((data.progress / total) * 100);
+                            document.getElementById('progressText').innerText = `${pct}%`;
+                            const log = document.createElement('div');
+                            log.innerHTML = `> ${data.log}`;
+                            logsDiv.prepend(log);
+                        }
+                        if(data.status === 'finished') {
+                            btn.innerText = "CAMPAÑA TERMINADA";
+                            btn.classList.add('bg-emerald-500', 'text-white');
+                        }
+                    }
+                }
+            } catch(e) { alert("Error de conexión."); btn.disabled = false; }
+        }
+    </script>
+</body>
+</html>
+
