@@ -14,6 +14,8 @@ from flask import Flask, render_template, request, jsonify, Response, stream_wit
 from urllib.parse import urljoin
 
 app = Flask(__name__)
+
+# Configuración de carpetas para Render
 app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -27,68 +29,66 @@ except:
 
 def extraer_emails_profundo(url_base):
     """
-    Realiza una búsqueda profunda visitando la Home y páginas de contacto.
+    Busca correos electrónicos visitando la Home y las sub-páginas de contacto.
     """
     if not url_base or not url_base.startswith('http'):
         return ""
     
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-    emails_encontrados = set()
+    emails_found = set()
     
     try:
-        # 1. Analizar página principal
-        res = requests.get(url_base, timeout=7, headers=headers)
+        # 1. Analizar Home
+        res = requests.get(url_base, timeout=8, headers=headers)
         if res.status_code != 200: return ""
         
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        # Función para buscar mails en texto
-        def buscar_en_texto(texto):
-            return re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', texto)
+        def find_in_text(text):
+            return re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
 
-        emails_encontrados.update(buscar_en_texto(res.text))
+        emails_found.update(find_in_text(res.text))
 
-        # 2. Buscar links a páginas de contacto o nosotros
+        # 2. Buscar enlaces de contacto o quienes somos
         contact_links = []
         for a in soup.find_all('a', href=True):
             href = a['href'].lower()
-            if any(term in href for term in ['contacto', 'contact', 'nosotros', 'about', 'info']):
+            if any(term in href for term in ['contacto', 'contact', 'nosotros', 'about', 'info', 'donde']):
                 full_url = urljoin(url_base, a['href'])
                 contact_links.append(full_url)
         
-        # 3. Visitar las páginas de contacto encontradas (limitado a 2 para no tardar mucho)
+        # 3. Visitar los links encontrados (máximo 2 adicionales para velocidad)
         for link in list(set(contact_links))[:2]:
             try:
                 res_c = requests.get(link, timeout=5, headers=headers)
-                emails_encontrados.update(buscar_en_texto(res_c.text))
-            except:
-                continue
+                emails_found.update(find_in_text(res_c.text))
+            except: continue
 
-        # Limpiar resultados (quitar extensiones de imagen falsos positivos)
-        valid_emails = [e for e in emails_encontrados if not e.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'))]
+        # Filtrar extensiones de imagen comunes que el Regex puede capturar
+        valid_emails = [e for e in emails_found if not e.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'))]
         
         return valid_emails[0] if valid_emails else ""
     except:
         return ""
 
 def enviar_correo_soberania(servidor_smtp, puerto, usuario, password, destinatario, asunto, cuerpo, imagen_url=None):
-    """Envía el correo con el adjunto de Yerba Mate Soberanía."""
+    """Envía el email profesional con el adjunto de la yerba."""
     msg = MIMEMultipart()
-    msg['From'] = usuario
+    msg['From'] = f"Juan Ignacio Lewczuk <{usuario}>"
     msg['To'] = destinatario
     msg['Subject'] = asunto
     msg.attach(MIMEText(cuerpo, 'plain'))
 
     if imagen_url:
         try:
-            # Convertir link de GitHub blob a Raw para descarga directa
+            # Convertimos link de GitHub a Raw para que Python pueda descargarlo
             raw_url = imagen_url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
             img_data = requests.get(raw_url, timeout=10).content
             image = MIMEImage(img_data)
-            image.add_header('Content-Disposition', 'attachment', filename="Producto_Soberania.png")
+            image.add_header('Content-Disposition', 'attachment', filename="Yerba_Mate_Soberania.png")
             msg.attach(image)
         except Exception as e:
-            print(f"Error adjuntando imagen: {e}")
+            print(f"No se pudo adjuntar la imagen: {e}")
 
     try:
         server = smtplib.SMTP(servidor_smtp, puerto)
@@ -96,7 +96,7 @@ def enviar_correo_soberania(servidor_smtp, puerto, usuario, password, destinatar
         server.login(usuario, password)
         server.sendmail(usuario, destinatario, msg.as_string())
         server.quit()
-        return True, "Enviado con éxito"
+        return True, "Enviado correctamente"
     except Exception as e:
         return False, str(e)
 
@@ -106,43 +106,44 @@ def index():
 
 @app.route('/search_places', methods=['POST'])
 def search_places():
-    if not gmaps: return jsonify({'error': 'Google Maps API no disponible.'}), 500
+    if not gmaps: return jsonify({'error': 'API de Google Maps no configurada.'}), 500
     
     zona = request.json.get('zona')
-    if not zona: return jsonify({'error': 'Ingresa una zona.'}), 400
+    if not zona: return jsonify({'error': 'Debes ingresar una ubicación.'}), 400
 
     try:
-        # Búsqueda en Maps
         places_result = gmaps.places(query=f"dieteticas en {zona}")
         results = places_result.get('results', [])
         
         leads = []
-        for place in results[:15]: # Procesamos 15 para mantener calidad y velocidad
-            details = gmaps.place(place_id=place['place_id'], fields=['name', 'formatted_address', 'formatted_phone_number', 'website'])['result']
+        # Escaneamos los primeros 15 resultados para asegurar profundidad
+        for place in results[:15]:
+            details = gmaps.place(place_id=place['place_id'], fields=['name', 'formatted_address', 'website'])['result']
             
             web = details.get('website', '')
-            tel = re.sub(r'\D', '', details.get('formatted_phone_number', ''))
-            if tel and not tel.startswith('54'): tel = '54' + tel
-
-            # Búsqueda profunda de email
+            # Ejecutar scraping profundo
             email_scrap = extraer_emails_profundo(web) if web else ""
 
             leads.append({
                 'nombre': details.get('name', 'Sin nombre'),
                 'direccion': details.get('formatted_address', 'Sin dirección'),
-                'telefono': tel,
                 'email': email_scrap,
                 'website': web
             })
         
-        if not leads: return jsonify({'error': 'No se hallaron resultados.'}), 404
+        if not leads: return jsonify({'error': 'No se encontraron dietéticas en esta zona.'}), 404
 
         df = pd.DataFrame(leads)
-        filename = f"leads_{zona.replace(' ', '_')}.csv"
+        filename = f"prospectos_{zona.replace(' ', '_')}.csv"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         df.to_csv(filepath, index=False, encoding='utf-8-sig')
         
-        return jsonify({'success': True, 'leads': leads, 'filename': filename, 'filepath': filepath})
+        return jsonify({
+            'success': True, 
+            'leads': leads, 
+            'filename': filename, 
+            'filepath': filepath
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -161,19 +162,21 @@ def start_campaign():
             for i, row in df.iterrows():
                 email = row.get('email')
                 if pd.isna(email) or not str(email).strip():
-                    yield f"data: {{'progress': {i+1}, 'log': '<div>Fila {i+1} sin email encontrado.</div>'}}\n\n"
+                    yield f"data: {{'progress': {i+1}, 'log': '<div>Fila {i+1}: Saltada (Sin email detectado).</div>'}}\n\n"
                     continue
                 
-                if i > 0: time.sleep(random.randint(20, 45))
+                # Pausa Anti-Spam dinámica
+                if i > 0: time.sleep(random.randint(25, 50))
                 
-                cuerpo = data.get('body').replace('{nombre}', str(row.get('nombre', 'Cliente')))
+                cuerpo_personalizado = data.get('body').replace('{nombre}', str(row.get('nombre', 'Cliente')))
+                
                 ok, status = enviar_correo_soberania(
                     'smtp.gmail.com', 587, data.get('email_user'), data.get('email_pass'),
-                    email, data.get('subject'), cuerpo, image_url
+                    email, data.get('subject'), cuerpo_personalizado, image_url
                 )
                 
                 color = "text-green-400" if ok else "text-red-400"
-                yield f"data: {{'progress': {i+1}, 'log': \"<div class='{color}'>#{i+1} {email}: {status}</div>\"}}\n\n"
+                yield f"data: {{'progress': {i+1}, 'log': \"<div class='{color} font-mono'>#{i+1} {email}: {status}</div>\"}}\n\n"
             
             yield f"data: {{'status': 'finished'}}\n\n"
         except Exception as e:
