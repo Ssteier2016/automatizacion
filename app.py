@@ -161,14 +161,26 @@ def start_email_campaign():
 
     def generate():
         total = len(selected)
-        yield f"data: {{'status': 'start', 'total': {total}}}\n\n"
+        # Usamos json.dumps para asegurar JSON válido
+        yield f"data: {json.dumps({'status': 'start', 'total': total})}\n\n"
+        
         for i, lead in enumerate(selected):
-            if i > 0: time.sleep(random.randint(15, 30))
+            # Delay para evitar spam
+            if i > 0: 
+                time.sleep(random.randint(15, 30))
+            
             asunto_p = subject_template.replace('{nombre}', lead['nombre'])
             cuerpo_p = body_template.replace('{nombre}', lead['nombre'])
+            
             ok, msg = enviar_mail_soberania(user, password, lead['email'], asunto_p, cuerpo_p, attach_img)
-            yield f"data: {{'progress': {i+1}, 'log': \"<div class='{'text-green-400' if ok else 'text-red-400'} text-[10px]'>[{i+1}/{total}] {lead['email']}: {msg}</div>\"}}\n\n"
-        yield f"data: {{'status': 'finished'}}\n\n"
+            
+            color_class = 'text-green-400' if ok else 'text-red-400'
+            log_html = f"<div class='{color_class} text-[10px]'>[{i+1}/{total}] {lead['email']}: {msg}</div>"
+            
+            yield f"data: {json.dumps({'progress': i+1, 'log': log_html})}\n\n"
+            
+        yield f"data: {json.dumps({'status': 'finished'})}\n\n"
+        
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 if __name__ == '__main__':
