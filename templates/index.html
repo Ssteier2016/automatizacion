@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Soberanía B2B - CRM Pro</title>
-    <!-- Cambié CDN por versión local -->
     <script src="https://cdn.tailwindcss.com/3.4.0"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -53,10 +52,10 @@
                 </div>
             </div>
 
-            <!-- 1. Buscador con IA -->
+            <!-- 1. Buscador Inteligente -->
             <div class="space-y-4">
                 <div class="flex justify-between items-end">
-                    <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2 flex-1">1. Búsqueda Inteligente</h3>
+                    <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2 flex-1">1. Búsqueda Inteligente de Dietéticas</h3>
                     <div class="flex items-center gap-2 pb-2 ml-4">
                         <span class="text-[8px] font-bold text-slate-500 uppercase">IA Activa</span>
                         <label class="switch scale-75 origin-right"><input type="checkbox" id="aiSearch" checked><span class="slider"></span></label>
@@ -65,12 +64,11 @@
                 <div class="space-y-3">
                     <div class="flex gap-2">
                         <input type="text" id="zona" placeholder="Ej: Morón, Buenos Aires" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-2xl text-sm outline-none focus:border-emerald-500 transition">
-                        <button onclick="buscar()" id="btnBuscar" class="bg-emerald-600 px-5 rounded-2xl hover:bg-emerald-500 transition"><i class="fa-solid fa-search"></i></button>
+                        <button onclick="buscarCombinado()" id="btnBuscar" class="bg-emerald-600 px-6 rounded-2xl hover:bg-emerald-500 transition flex items-center gap-2">
+                            <i class="fa-solid fa-search"></i> Buscar
+                        </button>
                     </div>
-                    <div class="flex gap-2">
-                        <input type="text" id="palabrasClave" placeholder="Palabras clave: dietética, natural, orgánico..." class="w-full bg-slate-900 border border-slate-800 p-3 rounded-2xl text-sm outline-none focus:border-blue-500 transition">
-                        <button onclick="buscarAvanzado()" id="btnBuscarAvanzado" class="bg-blue-600 px-4 rounded-2xl hover:bg-blue-500 transition"><i class="fa-solid fa-brain"></i></button>
-                    </div>
+                    <input type="text" id="palabrasClave" placeholder="Opcional: palabras clave específicas..." class="w-full bg-slate-900 border border-slate-800/50 p-3 rounded-2xl text-xs outline-none">
                 </div>
             </div>
 
@@ -220,77 +218,57 @@ Juan Ignacio Lewczuk
                 `${leads.length} comercios | 📧${conEmail} | 📱${conTelefono} | 🌐${conWeb}`;
         }
 
-        async function buscar() {
+        async function buscarCombinado() {
             const zona = document.getElementById('zona').value;
             const usarIA = document.getElementById('aiSearch').checked;
-            const btn = document.getElementById('btnBuscar');
-            if(!zona) return;
-            
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-            document.getElementById('leadsTable').innerHTML = '<tr><td colspan="5" class="py-32 text-center text-emerald-500 font-bold animate-pulse uppercase tracking-widest">Escaneando comercios en Google Maps...</td></tr>';
-            document.getElementById('searchTitle').innerText = `Resultados: ${zona}`;
-            
-            if(usarIA) {
-                document.getElementById('aiStatus').classList.remove('hidden');
-            }
-
-            try {
-                const res = await fetch('/search_places', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({zona, usar_ia: usarIA})
-                });
-                
-                if (!res.ok) {
-                    throw new Error(`HTTP error! status: ${res.status}`);
-                }
-                
-                const data = await res.json();
-                if (data.error) {
-                    throw new Error(data.error);
-                }
-                
-                leads = data.leads || [];
-                renderTable();
-                actualizarEstadisticas();
-                
-            } catch(e) { 
-                console.error("Error al buscar:", e);
-                alert("Error al buscar datos: " + e.message); 
-                document.getElementById('leadsTable').innerHTML = '<tr><td colspan="5" class="py-32 text-center text-red-500 font-bold">Error en la búsqueda. Verifica tu conexión.</td></tr>';
-            }
-            finally { 
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fa-solid fa-search"></i>';
-            }
-        }
-
-        async function buscarAvanzado() {
-            const zona = document.getElementById('zona').value;
             const palabras = document.getElementById('palabrasClave').value;
-            const btn = document.getElementById('btnBuscarAvanzado');
+            const btn = document.getElementById('btnBuscar');
             
-            if(!zona || !palabras) {
-                alert("Por favor, completa zona y palabras clave");
+            if(!zona) {
+                alert("Por favor, ingresa una zona (ej: Morón, Buenos Aires)");
                 return;
             }
             
             btn.disabled = true;
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-            document.getElementById('leadsTable').innerHTML = '<tr><td colspan="5" class="py-32 text-center text-purple-500 font-bold animate-pulse uppercase tracking-widest">Buscando con inteligencia artificial...</td></tr>';
-            document.getElementById('searchTitle').innerText = `IA: ${palabras}`;
-            document.getElementById('aiStatus').classList.remove('hidden');
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...';
+            
+            document.getElementById('leadsTable').innerHTML = `
+                <tr>
+                    <td colspan="5" class="py-32 text-center">
+                        <div class="flex flex-col items-center gap-3">
+                            <div class="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                            <div class="text-emerald-500 font-bold animate-pulse uppercase tracking-widest text-sm">
+                                Escaneando ${zona}...
+                            </div>
+                            <div class="text-[10px] text-slate-500 mt-2">
+                                Buscando dietéticas y comercios naturales
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            
+            document.getElementById('searchTitle').innerText = `Buscando en: ${zona}`;
+            
+            if(usarIA) {
+                document.getElementById('aiStatus').classList.remove('hidden');
+                document.getElementById('aiStatus').innerHTML = '<i class="fa-solid fa-robot"></i> IA Analizando...';
+            }
 
             try {
-                const res = await fetch('/search_ia', {
+                // Usar la nueva ruta combinada
+                const res = await fetch('/search_combinado', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({zona, palabras_clave: palabras})
+                    body: JSON.stringify({
+                        zona: zona,
+                        usar_ia: usarIA,
+                        palabras_clave: palabras || "dietéticas naturistas productos naturales"
+                    })
                 });
                 
                 if (!res.ok) {
-                    throw new Error(`HTTP error! status: ${res.status}`);
+                    throw new Error(`Error del servidor: ${res.status}`);
                 }
                 
                 const data = await res.json();
@@ -302,26 +280,76 @@ Juan Ignacio Lewczuk
                 renderTable();
                 actualizarEstadisticas();
                 
-                // Mostrar resultados de IA
-                if(data.ia_resultados) {
+                // Mostrar resultados de IA si existen
+                if(data.ia_resultados && usarIA) {
                     const iaInfo = document.createElement('div');
                     iaInfo.className = "bg-purple-900/20 border border-purple-700/30 p-4 rounded-xl mt-4";
                     iaInfo.innerHTML = `
-                        <div class="text-[10px] font-bold text-purple-400 mb-2">
-                            <i class="fa-solid fa-robot"></i> Análisis IA:
+                        <div class="text-[10px] font-bold text-purple-400 mb-2 flex items-center gap-2">
+                            <i class="fa-solid fa-robot"></i> Análisis IA para ${zona}:
                         </div>
-                        <div class="text-[9px] text-purple-300">${data.ia_resultados}</div>
+                        <div class="text-[9px] text-purple-300 leading-relaxed">${data.ia_resultados}</div>
+                        <div class="text-[8px] text-purple-500 mt-2 flex justify-between">
+                            <span>${data.total} comercios encontrados</span>
+                            <span>${data.con_email} con email</span>
+                        </div>
                     `;
+                    
+                    // Insertar en la consola
+                    document.getElementById('console').classList.remove('hidden');
                     document.getElementById('logs').prepend(iaInfo);
+                    
+                    // Actualizar estado IA
+                    document.getElementById('aiStatus').innerHTML = `<i class="fa-solid fa-robot"></i> IA: ${data.total} encontrados`;
+                }
+                
+                // Mostrar estadísticas en consola
+                if(data.leads && data.leads.length > 0) {
+                    const statsInfo = document.createElement('div');
+                    statsInfo.className = "bg-emerald-900/10 border border-emerald-700/20 p-3 rounded-xl mt-2";
+                    statsInfo.innerHTML = `
+                        <div class="text-[10px] font-bold text-emerald-400 mb-1">
+                            <i class="fa-solid fa-chart-bar"></i> Estadísticas:
+                        </div>
+                        <div class="text-[9px] text-emerald-300 grid grid-cols-2 gap-1">
+                            <div>Total comercios: ${data.total}</div>
+                            <div>Con email: ${data.con_email}</div>
+                            <div>Con teléfono: ${data.con_telefono}</div>
+                            <div>IA analizados: ${Math.min(15, data.total)}</div>
+                        </div>
+                    `;
+                    document.getElementById('logs').prepend(statsInfo);
                 }
                 
             } catch(e) { 
-                console.error("Error en búsqueda IA:", e);
-                alert("Error en búsqueda IA: " + e.message); 
+                console.error("Error en búsqueda combinada:", e);
+                document.getElementById('leadsTable').innerHTML = `
+                    <tr>
+                        <td colspan="5" class="py-32 text-center text-red-500 font-bold">
+                            <div class="flex flex-col items-center gap-2">
+                                <i class="fa-solid fa-exclamation-triangle text-2xl"></i>
+                                <div>Error: ${e.message}</div>
+                                <div class="text-xs text-slate-500">Verifica tu conexión y configuración de API keys</div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                
+                // Mostrar error en consola
+                document.getElementById('console').classList.remove('hidden');
+                const errorDiv = document.createElement('div');
+                errorDiv.className = "bg-red-900/20 border border-red-700/30 p-3 rounded-xl";
+                errorDiv.innerHTML = `
+                    <div class="text-[10px] font-bold text-red-400 mb-1">
+                        <i class="fa-solid fa-bug"></i> Error:
+                    </div>
+                    <div class="text-[9px] text-red-300">${e.message}</div>
+                `;
+                document.getElementById('logs').prepend(errorDiv);
             }
             finally { 
                 btn.disabled = false;
-                btn.innerHTML = '<i class="fa-solid fa-brain"></i>';
+                btn.innerHTML = '<i class="fa-solid fa-search"></i> Buscar';
             }
         }
 
