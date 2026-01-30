@@ -50,25 +50,21 @@ def scraping_profundo_contacto(url_base, exhaustivo=False):
         found_emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', texto_pagina)
         soup = BeautifulSoup(texto_pagina, 'html.parser')
         
-        # Lista de enlaces a revisar
         links_to_check = []
         for a in soup.find_all('a', href=True):
             href = a['href'].lower()
             h_full = urljoin(url_base, a['href'])
             
-            # Detectar RRSS inmediatamente
             if 'facebook.com' in href and not info["facebook"]:
                 info["facebook"] = a['href']
             if 'instagram.com' in href and not info["instagram"]:
                 info["instagram"] = a['href']
             
-            # Si es exhaustivo, guardamos páginas de contacto/nosotros
             if exhaustivo and any(term in href for term in ['contacto', 'contact', 'nosotros', 'about', 'info', 'donde']):
                 links_to_check.append(h_full)
 
-        # Revisar subpáginas si es necesario
         if exhaustivo:
-            for link in list(set(links_to_check))[:3]: # Limitamos a 3 subpáginas por velocidad
+            for link in list(set(links_to_check))[:3]:
                 try:
                     r_sub = requests.get(link, timeout=5, headers=headers)
                     found_emails.extend(re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', r_sub.text))
@@ -123,29 +119,52 @@ def search_places():
     if not gmaps: return jsonify({'error': 'Configurar API Key'}), 500
     
     try:
-        res_maps = gmaps.places(query=f"dieteticas en {zona}")['results']
-        leads = []
-        for p in res_maps[:15]:
-            det = gmaps.place(place_id=p['place_id'], fields=['name', 'formatted_address', 'formatted_phone_number', 'website'])['result']
-            tel_raw = det.get('formatted_phone_number', '')
-            tel_solo_numeros = re.sub(r'\D', '', tel_raw)
-            if tel_solo_numeros and not tel_solo_numeros.startswith('54'):
-                tel_solo_numeros = '54' + tel_solo_numeros
+        all_results = []
+        # Primera página de resultados
+        response = gmaps.places(query=f"dieteticas en {zona}")
+        all_results.extend(response.get('results', []))
+        
+        # Intentar obtener más páginas para ampliar el rango (hasta 40-60 resultados)
+        next_token = response.get('next_page_token')
+        if next_token:
+            time.sleep(2)  # Google requiere una breve pausa para activar el token
+            response2 = gmaps.places(query=f"dieteticas en {zona}", page_token=next_token)
+            all_results.extend(response2.get('results', []))
             
-            web = det.get('website', '')
-            contacto = scraping_profundo_contacto(web, exhaustivo) if web else {"email": "", "facebook": "", "instagram": ""}
+            # Opcional: una tercera página si existe
+            next_token2 = response2.get('next_page_token')
+            if next_token2:
+                time.sleep(2)
+                response3 = gmaps.places(query=f"dieteticas en {zona}", page_token=next_token2)
+                all_results.extend(response3.get('results', []))
 
-            leads.append({
-                'id': p['place_id'],
-                'nombre': det.get('name'),
-                'direccion': det.get('formatted_address'),
-                'telefono': tel_solo_numeros,
-                'tel_display': tel_raw,
-                'email': contacto["email"],
-                'facebook': contacto["facebook"],
-                'instagram': contacto["instagram"],
-                'web': web
-            })
+        leads = []
+        # Procesamos hasta 40 resultados para mantener un balance entre cantidad y velocidad
+        for p in all_results[:40]:
+            try:
+                det = gmaps.place(place_id=p['place_id'], fields=['name', 'formatted_address', 'formatted_phone_number', 'website'])['result']
+                tel_raw = det.get('formatted_phone_number', '')
+                tel_solo_numeros = re.sub(r'\D', '', tel_raw)
+                if tel_solo_numeros and not tel_solo_numeros.startswith('54'):
+                    tel_solo_numeros = '54' + tel_solo_numeros
+                
+                web = det.get('website', '')
+                contacto = scraping_profundo_contacto(web, exhaustivo) if web else {"email": "", "facebook": "", "instagram": ""}
+
+                leads.append({
+                    'id': p['place_id'],
+                    'nombre': det.get('name'),
+                    'direccion': det.get('formatted_address'),
+                    'telefono': tel_solo_numeros,
+                    'tel_display': tel_raw,
+                    'email': contacto["email"],
+                    'facebook': contacto["facebook"],
+                    'instagram': contacto["instagram"],
+                    'web': web
+                })
+            except:
+                continue
+
         return jsonify({'success': True, 'leads': leads})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -161,11 +180,9 @@ def start_email_campaign():
 
     def generate():
         total = len(selected)
-        # Usamos json.dumps para asegurar JSON válido
         yield f"data: {json.dumps({'status': 'start', 'total': total})}\n\n"
         
         for i, lead in enumerate(selected):
-            # Delay para evitar spam
             if i > 0: 
                 time.sleep(random.randint(15, 30))
             
