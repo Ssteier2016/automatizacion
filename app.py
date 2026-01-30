@@ -15,18 +15,26 @@ from urllib.parse import urljoin
 
 app = Flask(__name__)
 
-# API KEY GOOGLE MAPS
-GOOGLE_MAPS_KEY = os.environ.get('GOOGLE_MAPS_KEY', 'AIzaSyBGJ8B2z9p52LM-x9vEwxO9pmx8V9w7Ws4')
+# --- CONFIGURACIÓN DE SEGURIDAD (LEER DESDE SECRETS/ENTORNO) ---
+# Aquí NO ponemos las llaves reales. Python las tomará de los "Secrets" de GitHub o del sistema.
+GOOGLE_MAPS_KEY = os.environ.get('GOOGLE_MAPS_KEY')
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+
 try:
-    gmaps = googlemaps.Client(key=GOOGLE_MAPS_KEY)
-except:
+    if GOOGLE_MAPS_KEY:
+        gmaps = googlemaps.Client(key=GOOGLE_MAPS_KEY)
+    else:
+        gmaps = None
+        print("Advertencia: No se encontró la variable GOOGLE_MAPS_KEY.")
+except Exception as e:
     gmaps = None
+    print(f"Error al inicializar el cliente de Google Maps: {e}")
 
 @app.route('/producto.png')
 def get_producto_image():
     if os.path.exists('producto.png'):
         return send_file('producto.png', mimetype='image/png')
-    return "No encontrado", 404
+    return "Imagen no encontrada", 404
 
 def validar_email(email):
     patron = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
@@ -71,7 +79,6 @@ def scraping_profundo_contacto(url_base, exhaustivo=False):
 
 def enviar_mail_soberania(smtp_user, smtp_pass, destino, asunto, cuerpo, adjuntar_imagen):
     msg = MIMEMultipart()
-    # Aseguramos que el 'From' coincida con el usuario para que Gmail lo guarde en 'Enviados'
     msg['From'] = smtp_user
     msg['To'] = destino
     msg['Subject'] = asunto
@@ -88,7 +95,6 @@ def enviar_mail_soberania(smtp_user, smtp_pass, destino, asunto, cuerpo, adjunta
         except: pass
 
     try:
-        # Configuración estándar de Gmail SMTP
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
         server.login(smtp_user, smtp_pass)
@@ -106,17 +112,16 @@ def index():
 def search_places():
     zona = request.json.get('zona')
     exhaustivo = request.json.get('exhaustivo', False)
-    if not gmaps: return jsonify({'error': 'Configurar Google Maps API'}), 500
+    if not gmaps: return jsonify({'error': 'La API de Google Maps no está configurada correctamente en los Secrets.'}), 500
     
     try:
         all_results = []
         response = gmaps.places(query=f"dieteticas en {zona}")
         all_results.extend(response.get('results', []))
         
-        # Obtenemos el máximo de resultados permitidos por Google (hasta 60)
         while 'next_page_token' in response:
             token = response['next_page_token']
-            time.sleep(2) # Pausa obligatoria de Google
+            time.sleep(2)
             response = gmaps.places(query=f"dieteticas en {zona}", page_token=token)
             all_results.extend(response.get('results', []))
             if len(all_results) >= 60: break
@@ -164,7 +169,6 @@ def start_email_campaign():
         yield f"data: {json.dumps({'status': 'start', 'total': total})}\n\n"
         
         for i, lead in enumerate(selected):
-            # Delay anti-bloqueo/spam
             if i > 0: time.sleep(random.randint(25, 45))
             
             asunto_p = subject_template.replace('{nombre}', lead['nombre'])
@@ -182,4 +186,5 @@ def start_email_campaign():
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)
+
