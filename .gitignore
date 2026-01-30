@@ -1,6 +1,68 @@
+# Entorno
 .env
-pycache/
-*.pyc
-venv/
-.vscode/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtualenv
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Flask
+instance/
+.webassets-cache
+
+# Archivos de desarrollo
+*.log
+*.sqlite
+*.db
+*.pem
+
+# Archivos temporales
+*.tmp
+*.temp
+
+# Imágenes y archivos grandes
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.pdf
+!producto.png  # Excluir solo el producto.png
