@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
-from flask import Flask, request, jsonify, Response, stream_with_context, send_file
+from flask import Flask, request, jsonify, Response, stream_with_context, send_file, render_template
 from urllib.parse import urljoin
 from flask_cors import CORS
 
@@ -114,8 +114,8 @@ def enviar_mail_soberania(smtp_user, smtp_pass, destino, asunto, cuerpo, adjunta
 
 @app.route('/')
 def index():
-    # Dado que se elimina el index.html, devolvemos un mensaje de estado
-    return jsonify({"status": "Backend Operativo", "message": "Yerba Soberania API is running"}), 200
+    # Volvemos a servir el archivo HTML que cargará React
+    return render_template('index.html')
 
 @app.route('/search_places', methods=['POST'])
 def search_places():
