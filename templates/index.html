@@ -36,7 +36,7 @@
             border: 1px solid rgba(16, 185, 129, 0.5);
             transform: translateY(20px); 
             opacity: 0; 
-            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+            transition: all 0.4s ease; 
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
             margin: 1rem;
             width: calc(100% - 2rem);
@@ -263,7 +263,6 @@
 
     <script>
         let leads = []; let waCola = []; let waCursor = 0; let tutorialStep = 0;
-        const apiKey = ""; // La clave se inyecta automáticamente en el entorno
 
         const tutorialSteps = [
             { title: "¡Bienvenido!", text: "Esta herramienta te ayuda a encontrar dietéticas y contactarlas fácilmente por WhatsApp o Email.", highlight: null },
@@ -277,29 +276,21 @@
             setTimeout(() => document.getElementById('tutorialModal').classList.add('tutorial-active'), 500);
         };
 
-        // INTEGRACIÓN GEMINI API ✨
-        async function callGemini(prompt) {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-            const payload = {
-                contents: [{ parts: [{ text: prompt }] }],
-                systemInstruction: { parts: [{ text: "Eres un experto en ventas B2B para la marca 'Yerba Mate Soberanía'. Tu objetivo es ayudar al usuario a vender yerba mate premium a dietéticas de Argentina. El tono debe ser profesional, cercano y muy persuasivo. Genera respuestas directas sin introducciones innecesarias." }] }
-            };
-
-            for (let i = 0; i < 5; i++) {
-                try {
-                    const response = await fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    const data = await response.json();
-                    return data.candidates?.[0]?.content?.parts?.[0]?.text;
-                } catch (e) {
-                    const delay = Math.pow(2, i) * 1000;
-                    await new Promise(res => setTimeout(res, delay));
-                }
+        // INTEGRACIÓN SEGURA CON EL BACKEND PARA LA IA ✨
+        async function callGemini(prompt, systemInstruction) {
+            try {
+                const response = await fetch('/api/ai_query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, systemInstruction })
+                });
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+                return data.text;
+            } catch (e) {
+                console.error(e);
+                return "Error al conectar con la IA. Verifica que configuraste la variable GEMINI_API_KEY en Render.";
             }
-            return "Lo siento, hubo un error conectando con el asistente IA. Por favor intenta de nuevo.";
         }
 
         async function generarPitchIA() {
@@ -311,8 +302,9 @@
             btn.classList.add('ai-loading');
 
             const prompt = "Genera un mensaje corto de WhatsApp de 3 líneas para un dueño de dietética. Debe mencionar que vendemos Yerba Mate Soberanía (premium, artesanal) y preguntar si les gustaría recibir la lista de precios mayorista. Usa {nombre} como variable para el nombre de la tienda.";
+            const system = "Eres un experto en ventas B2B para la marca 'Yerba Mate Soberanía'. El tono debe ser profesional, cercano y persuasivo.";
             
-            const result = await callGemini(prompt);
+            const result = await callGemini(prompt, system);
             if(result) textarea.value = result;
 
             btn.innerText = originalText;
@@ -329,9 +321,10 @@
             
             const tiendaNames = leads.map(l => l.nombre).join(", ");
             const prompt = `Analiza esta lista de tiendas en la zona de ${zona}: ${tiendaNames}. Dame 3 consejos rápidos de venta específicos para esta zona y esta lista de prospectos para venderles Yerba Mate Soberanía. Sé breve y estratégico.`;
+            const system = "Eres un estratega comercial senior de Yerba Mate Soberanía.";
             
-            const result = await callGemini(prompt);
-            content.innerText = result || "No se pudo realizar el análisis en este momento.";
+            const result = await callGemini(prompt, system);
+            content.innerText = result || "No se pudo realizar el análisis.";
         }
 
         function cerrarAIModal() {
