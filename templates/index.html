@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yerba Soberanía - CRM B2B</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .sidebar { background: #0b1120; border-right: 1px solid #1e293b; }
+        .accent-emerald { color: #10b981; }
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        input[type="checkbox"] { width: 18px; height: 18px; accent-color: #10b981; cursor: pointer; }
+        .sending-row { background-color: rgba(16, 185, 129, 0.15); border-left: 4px solid #10b981; }
+        
+        /* Modales */
+        .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
+        
+        /* Estilos para el Tutorial Flotante y Pequeño */
+        #tutorialModal { 
+            display: flex; 
+            background: transparent; 
+            pointer-events: none; /* Permite interactuar con lo de abajo si no se toca el card */
+            backdrop-filter: none;
+            justify-content: flex-end;
+            align-items: flex-end;
+        }
+
+        .tutorial-card { 
+            pointer-events: auto; /* El card sí recibe clics */
+            background: rgba(15, 23, 42, 0.95); 
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(16, 185, 129, 0.5);
+            transform: translateY(20px); 
+            opacity: 0; 
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            margin: 2rem;
+        }
+        .tutorial-active .tutorial-card { transform: translateY(0); opacity: 1; }
+        
+        /* Highlight de elementos centrado en el guiado */
+        .highlight-element {
+            position: relative;
+            z-index: 110 !important;
+            box-shadow: 0 0 0 9999px rgba(2, 6, 23, 0.6);
+            border-radius: 1rem;
+            pointer-events: none;
+            outline: 3px solid #10b981;
+            outline-offset: 4px;
+        }
+    </style>
+</head>
+<body class="bg-[#020617] text-slate-200 font-sans min-h-screen overflow-hidden">
+
+    <div class="flex flex-col lg:flex-row min-h-screen">
+        
+        <!-- SIDEBAR IZQUIERDA -->
+        <aside class="lg:w-96 sidebar p-6 space-y-6 flex flex-col custom-scroll overflow-y-auto">
+            <div class="flex items-center gap-3">
+                <div class="bg-emerald-600 p-2 rounded-xl">
+                    <i class="fa-solid fa-leaf text-white text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-black tracking-tighter uppercase leading-none">Yerba <span class="accent-emerald">Soberanía</span></h1>
+                    <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Automatización CRM</p>
+                </div>
+            </div>
+
+            <!-- BUSCADOR -->
+            <div id="step-1" class="space-y-4 pt-4 rounded-2xl transition-all duration-300">
+                <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2">1. Localización</h3>
+                <div class="flex gap-2">
+                    <input type="text" id="zona" placeholder="Ej: Morón, Buenos Aires" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-2xl text-sm outline-none focus:border-emerald-500 transition">
+                    <button onclick="buscar()" id="btnBuscar" class="bg-emerald-600 px-5 rounded-2xl hover:bg-emerald-500 transition">
+                        <i class="fa-solid fa-search"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- WHATSAPP CONFIG -->
+            <div id="step-2" class="space-y-4 pt-4 rounded-2xl transition-all duration-300">
+                <h3 class="text-[10px] font-black text-emerald-500 uppercase tracking-widest border-b border-emerald-900/30 pb-2">2. WhatsApp Uno a Uno</h3>
+                <div class="space-y-3">
+                    <label class="text-[9px] font-bold text-slate-500 uppercase px-1">App de WhatsApp</label>
+                    <select id="waVersion" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-xs outline-none focus:border-emerald-500">
+                        <option value="web">WhatsApp Web (Navegador)</option>
+                        <option value="app">WhatsApp Messenger (App)</option>
+                        <option value="business">WhatsApp Business (App)</option>
+                    </select>
+
+                    <label class="text-[9px] font-bold text-slate-500 uppercase px-1">Mensaje ({nombre})</label>
+                    <textarea id="waBody" rows="3" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-[10px] outline-none focus:border-emerald-500 resize-none">Hola {nombre}, ¿cómo estás? Te escribo de Yerba Mate Soberanía para enviarte nuestra lista de precios mayorista.</textarea>
+                    
+                    <button onclick="iniciarWhatsAppMasivo()" class="w-full bg-emerald-600 text-white font-black py-3 rounded-xl hover:bg-emerald-500 transition flex items-center justify-center gap-2 text-xs uppercase shadow-lg">
+                        <i class="fa-brands fa-whatsapp text-lg"></i> Iniciar Envío WA
+                    </button>
+                </div>
+            </div>
+
+            <!-- EMAIL CONFIG -->
+            <div class="space-y-4 pt-4">
+                <h3 class="text-[10px] font-black text-blue-500 uppercase tracking-widest border-b border-blue-900/30 pb-2">3. Campaña de Email</h3>
+                <div class="space-y-3">
+                    <input type="email" id="emailUser" placeholder="Gmail User" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-[10px] outline-none">
+                    <input type="password" id="emailPass" placeholder="App Password" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-[10px] outline-none">
+                    <button onclick="iniciarEmailMasivo()" class="w-full bg-blue-600 text-white font-black py-3 rounded-xl hover:bg-blue-500 transition flex items-center justify-center gap-2 text-xs uppercase">
+                        <i class="fa-solid fa-envelope"></i> Enviar Emails
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- CONTENIDO PRINCIPAL -->
+        <main class="flex-1 p-8 flex flex-col overflow-hidden">
+            <div class="bg-[#0b1120] rounded-[2rem] border border-slate-800 overflow-hidden shadow-2xl flex flex-col flex-1">
+                <div class="px-8 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/40">
+                    <div id="step-3" class="flex items-center gap-4 rounded-xl p-1 transition-all duration-300">
+                        <input type="checkbox" id="selectAll" onclick="toggleAll()">
+                        <h2 class="text-xs font-bold uppercase tracking-widest text-slate-400">Prospectos Encontrados</h2>
+                    </div>
+                    <div id="stats" class="text-[10px] font-black text-emerald-500">Listo</div>
+                </div>
+
+                <div class="flex-1 overflow-auto custom-scroll">
+                    <table class="w-full text-[11px] text-left">
+                        <thead class="bg-slate-900/80 text-[9px] uppercase text-slate-500 font-black sticky top-0">
+                            <tr>
+                                <th class="px-6 py-4 w-10 text-center">Sel</th>
+                                <th class="px-6 py-4">Comercio</th>
+                                <th class="px-6 py-4">Dirección</th>
+                                <th class="px-6 py-4 text-center">WhatsApp</th>
+                                <th class="px-6 py-4">Email</th>
+                                <th class="px-6 py-4">RRSS</th>
+                                <th class="px-6 py-4 text-center">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leadsTable" class="divide-y divide-slate-800/50">
+                            <tr><td colspan="7" class="py-20 text-center text-slate-700 italic">Busca una zona para ver resultados...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL TUTORIAL MINI (FLOTANTE EN ESQUINA) -->
+    <div id="tutorialModal" class="modal">
+        <div class="tutorial-card w-full max-w-[280px] p-6 rounded-[1.5rem] space-y-4">
+            <div class="flex items-center gap-3 border-b border-slate-800 pb-3">
+                <div class="w-10 h-10 bg-emerald-600/20 rounded-full flex items-center justify-center">
+                    <i class="fa-solid fa-wand-magic-sparkles text-xl text-emerald-500"></i>
+                </div>
+                <h2 class="text-sm font-black text-white uppercase tracking-tighter" id="tutorialTitle">Tutorial</h2>
+            </div>
+            
+            <div id="tutorialContent">
+                <p class="text-[11px] text-slate-300 leading-relaxed" id="tutorialText">
+                    Bienvenido. Vamos a configurar el sistema rápidamente.
+                </p>
+            </div>
+
+            <div class="flex items-center justify-between gap-4 pt-2">
+                <button onclick="cerrarTutorial()" class="text-slate-500 text-[9px] uppercase font-bold hover:text-white transition">Saltar</button>
+                <button onclick="nextTutorialStep()" id="btnTutorial" class="bg-emerald-600 text-white font-black px-4 py-2 rounded-lg hover:bg-emerald-500 transition uppercase text-[10px] shadow-lg tracking-widest">
+                    Siguiente
+                </button>
+            </div>
+            
+            <div class="flex justify-center gap-1">
+                <div class="h-1 w-4 rounded-full bg-emerald-600" id="dot-0"></div>
+                <div class="h-1 w-4 rounded-full bg-slate-800" id="dot-1"></div>
+                <div class="h-1 w-4 rounded-full bg-slate-800" id="dot-2"></div>
+                <div class="h-1 w-4 rounded-full bg-slate-800" id="dot-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL WHATSAPP SECUENCIAL (OCULTO AL INICIO) -->
+    <div id="waModal" class="modal flex items-center justify-center p-6" style="display: none;">
+        <div class="bg-slate-900 border border-slate-700 w-full max-w-sm p-8 rounded-[2.5rem] shadow-2xl text-center space-y-5">
+            <div class="w-16 h-16 bg-emerald-600/20 rounded-full flex items-center justify-center mx-auto">
+                <i class="fa-brands fa-whatsapp text-3xl text-emerald-500"></i>
+            </div>
+            <div>
+                <h2 class="text-lg font-black text-white uppercase" id="modalTitle">Enviando...</h2>
+                <p class="text-[10px] text-slate-400 mt-1" id="modalProgress">0 de 0 completados</p>
+            </div>
+            <div class="bg-black/40 p-3 rounded-xl border border-slate-800 text-[10px] font-mono text-emerald-500" id="modalTimer">
+                Listo para abrir chat.
+            </div>
+            <div class="flex gap-2">
+                <button onclick="cerrarModal()" class="flex-1 bg-slate-800 text-slate-400 font-bold py-3 rounded-xl text-[10px] uppercase">Detener</button>
+                <button onclick="abrirSiguienteWA()" id="btnSiguiente" class="flex-1 bg-emerald-600 text-white font-bold py-3 rounded-xl text-[10px] uppercase">Abrir Chat</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let leads = [];
+        let waCola = [];
+        let waCursor = 0;
+        let tutorialStep = 0;
+
+        const tutorialSteps = [
+            {
+                title: "¡Hola!",
+                text: "Configura el CRM en 3 pasos rápidos para empezar a vender.",
+                btn: "Empezar",
+                highlight: null
+            },
+            {
+                title: "Paso 1: Buscar",
+                text: "Escribe una zona y encuentra dietéticas automáticamente.",
+                btn: "Siguiente",
+                highlight: "step-1"
+            },
+            {
+                title: "Paso 2: Mensaje",
+                text: "Configura tu texto. Usaremos el nombre de la tienda solo.",
+                btn: "Siguiente",
+                highlight: "step-2"
+            },
+            {
+                title: "Paso 3: Enviar",
+                text: "Selecciona las tiendas y dale a 'Iniciar Envío' para contactarlas.",
+                btn: "Finalizar",
+                highlight: "step-3"
+            }
+        ];
+
+        window.onload = () => {
+            // Iniciar tutorial flotante
+            setTimeout(() => {
+                document.getElementById('tutorialModal').classList.add('tutorial-active');
+            }, 500);
+        };
+
+        function nextTutorialStep() {
+            if (tutorialSteps[tutorialStep].highlight) {
+                document.getElementById(tutorialSteps[tutorialStep].highlight).classList.remove('highlight-element');
+            }
+
+            tutorialStep++;
+            if (tutorialStep >= tutorialSteps.length) {
+                cerrarTutorial();
+                return;
+            }
+
+            const step = tutorialSteps[tutorialStep];
+            document.getElementById('tutorialTitle').innerText = step.title;
+            document.getElementById('tutorialText').innerText = step.text;
+            document.getElementById('btnTutorial').innerText = step.btn;
+
+            for (let i = 0; i < tutorialSteps.length; i++) {
+                document.getElementById(`dot-${i}`).className = `h-1 w-4 rounded-full ${i <= tutorialStep ? 'bg-emerald-600' : 'bg-slate-800'}`;
+            }
+
+            if (step.highlight) {
+                const el = document.getElementById(step.highlight);
+                el.classList.add('highlight-element');
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        function cerrarTutorial() {
+            tutorialSteps.forEach(s => {
+                if(s.highlight) document.getElementById(s.highlight).classList.remove('highlight-element');
+            });
+            document.getElementById('tutorialModal').style.display = 'none';
+        }
+
+        async function buscar() {
+            const zona = document.getElementById('zona').value;
+            if(!zona) return;
+            const btn = document.getElementById('btnBuscar');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            
+            try {
+                const res = await fetch('/search_places', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({zona, exhaustivo: true})
+                });
+                const data = await res.json();
+                leads = data.leads;
+                renderTable();
+                document.getElementById('stats').innerText = `${leads.length} RESULTADOS`;
+            } catch(e) { console.error(e); }
+            finally { 
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-search"></i>';
+            }
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('leadsTable');
+            tbody.innerHTML = "";
+            leads.forEach((l, i) => {
+                const tr = document.createElement('tr');
+                tr.id = `row-${i}`;
+                tr.className = "hover:bg-slate-900/40 transition group";
+                
+                const rrss = [];
+                if(l.facebook) rrss.push(`<a href="${l.facebook}" target="_blank" class="text-blue-400 hover:text-blue-300"><i class="fa-brands fa-facebook"></i></a>`);
+                if(l.instagram) rrss.push(`<a href="${l.instagram}" target="_blank" class="text-pink-400 hover:text-pink-300"><i class="fa-brands fa-instagram"></i></a>`);
+                
+                tr.innerHTML = `
+                    <td class="px-6 py-4 text-center"><input type="checkbox" class="lead-check" data-index="${i}" ${l.telefono || l.email ? 'checked' : 'disabled'}></td>
+                    <td class="px-6 py-4 font-bold text-slate-200">${l.nombre}</td>
+                    <td class="px-6 py-4 text-slate-500 max-w-[150px] truncate">${l.direccion}</td>
+                    <td class="px-6 py-4 text-center font-mono text-emerald-500">${l.telefono || '--'}</td>
+                    <td class="px-6 py-4 text-slate-400">${l.email || '<span class="text-slate-800">N/A</span>'}</td>
+                    <td class="px-6 py-4 text-lg space-x-2">${rrss.join('') || '--'}</td>
+                    <td class="px-6 py-4 text-center" id="status-${i}">
+                        <span class="text-[9px] text-slate-700 uppercase font-black">Pendiente</span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function toggleAll() {
+            const master = document.getElementById('selectAll');
+            document.querySelectorAll('.lead-check:not(:disabled)').forEach(c => c.checked = master.checked);
+        }
+
+        function iniciarWhatsAppMasivo() {
+            waCola = [];
+            document.querySelectorAll('.lead-check:checked').forEach(c => {
+                const idx = parseInt(c.dataset.index);
+                if(leads[idx].telefono) waCola.push(idx);
+            });
+
+            if(waCola.length === 0) return alert("Selecciona contactos con número de teléfono.");
+            
+            waCursor = 0;
+            const modal = document.getElementById('waModal');
+            modal.style.display = 'flex';
+            document.getElementById('btnSiguiente').style.display = 'block';
+            actualizarModalWA();
+        }
+
+        function actualizarModalWA() {
+            if(waCursor >= waCola.length) {
+                document.getElementById('modalTitle').innerText = "Fin de Lista";
+                document.getElementById('modalTimer').innerText = "Campaña completada.";
+                document.getElementById('btnSiguiente').style.display = 'none';
+                return;
+            }
+            const lead = leads[waCola[waCursor]];
+            document.getElementById('modalTitle').innerText = lead.nombre;
+            document.getElementById('modalProgress').innerText = `Cliente ${waCursor + 1} de ${waCola.length}`;
+            
+            document.querySelectorAll('tr').forEach(r => r.classList.remove('sending-row'));
+            document.getElementById(`row-${waCola[waCursor]}`).classList.add('sending-row');
+        }
+
+        function abrirSiguienteWA() {
+            const lead = leads[waCola[waCursor]];
+            const version = document.getElementById('waVersion').value;
+            let body = document.getElementById('waBody').value.replace('{nombre}', lead.nombre);
+            
+            const encoded = encodeURIComponent(body);
+            let url = "";
+
+            if(version === 'web') url = `https://web.whatsapp.com/send?phone=${lead.telefono}&text=${encoded}`;
+            else url = `whatsapp://send?phone=${lead.telefono}&text=${encoded}`;
+
+            window.open(url, '_blank');
+            
+            document.getElementById(`status-${waCola[waCursor]}`).innerHTML = `<span class="text-emerald-500 font-black uppercase">Enviado</span>`;
+            
+            waCursor++;
+            actualizarModalWA();
+        }
+
+        function cerrarModal() {
+            document.getElementById('waModal').style.display = 'none';
+        }
+
+        async function iniciarEmailMasivo() {
+            const selected = [];
+            document.querySelectorAll('.lead-check:checked').forEach(c => {
+                const idx = parseInt(c.dataset.index);
+                if(leads[idx].email) {
+                    selected.push({...leads[idx], original_index: idx});
+                }
+            });
+
+            if(selected.length === 0) return alert("No hay emails válidos seleccionados.");
+            alert("Iniciando envío de correos. Revisa la columna de Estado en la tabla.");
+        }
+    </script>
+</body>
+</html>
