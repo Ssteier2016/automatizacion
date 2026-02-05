@@ -16,7 +16,7 @@ from urllib.parse import urljoin
 from flask_cors import CORS
 
 app = Flask(__name__)
-# Habilitamos CORS para que React pueda comunicarse con Flask
+# Habilitamos CORS para que React pueda comunicarse con Flask sin problemas de seguridad
 CORS(app)
 
 app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
@@ -40,7 +40,7 @@ def validar_email(email):
     return bool(re.match(patron_generico, email))
 
 def scraping_profundo_contacto(url_base, exhaustivo=False):
-    """Busca emails y redes sociales con mayor profundidad."""
+    """Busca emails y redes sociales con mayor profundidad si se solicita."""
     info = {"email": "", "facebook": "", "instagram": ""}
     if not url_base or not url_base.startswith('http'):
         return info
@@ -64,7 +64,7 @@ def scraping_profundo_contacto(url_base, exhaustivo=False):
             if 'instagram.com' in href and not info["instagram"]:
                 info["instagram"] = a['href']
             
-            if exhaustivo and any(term in href for term in ['contacto', 'contact', 'nosotros', 'about', 'info']):
+            if exhaustivo and any(term in href for term in ['contacto', 'contact', 'nosotros', 'about', 'info', 'donde']):
                 links_to_check.append(h_full)
 
         if exhaustivo:
@@ -111,6 +111,11 @@ def enviar_mail_soberania(smtp_user, smtp_pass, destino, asunto, cuerpo, adjunta
         return True, "Enviado"
     except Exception as e:
         return False, str(e)
+
+@app.route('/')
+def index():
+    # Dado que se elimina el index.html, devolvemos un mensaje de estado
+    return jsonify({"status": "Backend Operativo", "message": "Yerba Soberania API is running"}), 200
 
 @app.route('/search_places', methods=['POST'])
 def search_places():
@@ -173,15 +178,18 @@ def start_email_campaign():
         total = len(selected)
         yield f"data: {json.dumps({'status': 'start', 'total': total})}\n\n"
         for i, lead in enumerate(selected):
-            if i > 0: time.sleep(random.randint(10, 20))
+            if i > 0: 
+                time.sleep(random.randint(10, 20))
+            
             asunto_p = subject_template.replace('{nombre}', lead['nombre'])
             cuerpo_p = body_template.replace('{nombre}', lead['nombre'])
             ok, msg = enviar_mail_soberania(user, password, lead['email'], asunto_p, cuerpo_p, attach_img)
+            
             yield f"data: {json.dumps({'progress': i+1, 'msg': msg, 'index': lead.get('original_index'), 'success': ok})}\n\n"
+        
         yield f"data: {json.dumps({'status': 'finished'})}\n\n"
         
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 if __name__ == '__main__':
-    # El servidor corre en el puerto 5000
     app.run(host='0.0.0.0', port=5000, debug=True)
