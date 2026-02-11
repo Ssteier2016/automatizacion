@@ -21,7 +21,7 @@ CORS(app)
 app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# API KEYS - Se recomienda configurarlas en Render -> Environment Variables
+# API KEYS - Configurar en Render -> Environment Variables
 GOOGLE_MAPS_KEY = os.environ.get('GOOGLE_MAPS_KEY', 'AIzaSyBGJ8B2z9p52LM-x9vEwxO9pmx8V9w7Ws4')
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 
@@ -43,18 +43,18 @@ def validar_email(email):
     return bool(re.match(patron, email))
 
 def scraping_profundo_contacto(url_base, exhaustivo=False):
-    """Busca emails y redes sociales en el sitio web del comercio."""
+    """Busca emails y redes sociales de forma rápida (timeout bajo para evitar 502)."""
     info = {"email": "", "facebook": "", "instagram": ""}
     if not url_base or not url_base.startswith('http'):
         return info
     
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'}
     try:
-        res = requests.get(url_base, timeout=8, headers=headers)
+        # Timeout bajo (3s) para no bloquear el worker de Gunicorn en Render
+        res = requests.get(url_base, timeout=3, headers=headers)
         if res.status_code != 200: return info
         
         texto_pagina = res.text
-        # Búsqueda de emails con Regex
         found_emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', texto_pagina)
         soup = BeautifulSoup(texto_pagina, 'html.parser')
         
@@ -79,11 +79,8 @@ def enviar_mail_soberania(smtp_user, smtp_pass, destino, asunto, cuerpo, adjunta
     msg['From'] = f"Juan Ignacio Lewczuk <{smtp_user}>"
     msg['To'] = destino
     msg['Subject'] = asunto
-    
-    # Adjuntar el cuerpo del mensaje
     msg.attach(MIMEText(cuerpo, 'plain'))
 
-    # Adjuntar imagen si existe y está marcado
     if adjuntar_imagen and os.path.exists('producto.png'):
         try:
             with open('producto.png', 'rb') as f:
@@ -95,7 +92,6 @@ def enviar_mail_soberania(smtp_user, smtp_pass, destino, asunto, cuerpo, adjunta
             print(f"Error adjuntando imagen: {e}")
 
     try:
-        # Configuración de Gmail
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
         server.login(smtp_user, smtp_pass)
@@ -103,10 +99,7 @@ def enviar_mail_soberania(smtp_user, smtp_pass, destino, asunto, cuerpo, adjunta
         server.quit()
         return True, "Enviado"
     except Exception as e:
-        error_msg = str(e)
-        if "Username and Password not accepted" in error_msg:
-            return False, "Clave de Aplicación incorrecta"
-        return False, error_msg
+        return False, str(e)
 
 @app.route('/')
 def index():
@@ -114,35 +107,29 @@ def index():
 
 @app.route('/search_places', methods=['POST'])
 def search_places():
-    """Busca comercios en Google Maps."""
+    """Busca comercios en Google Maps con límites para evitar Timeout."""
     data = request.json
     zona = data.get('zona')
-    exhaustivo = data.get('exhaustivo', False)
-    
     if not gmaps:
         return jsonify({'error': 'Google Maps API Key no configurada'}), 500
     
     try:
-        # Buscamos solo dietéticas para mayor precisión
         response = gmaps.places(query=f"dieteticas en {zona}")
         results = response.get('results', [])
         
         leads = []
-        # Limitamos a 30 resultados para evitar Timeouts en Render (Máximo 30s)
-        for p in results[:30]:
+        # Limitamos a 20 para asegurar que la respuesta sea menor a 30 segundos
+        for p in results[:20]:
             try:
-                # Obtener detalles del lugar
                 det = gmaps.place(place_id=p['place_id'], 
                                   fields=['name', 'formatted_address', 'formatted_phone_number', 'website'])['result']
                 
                 tel_raw = det.get('formatted_phone_number', '')
-                # Limpiar teléfono para WhatsApp
                 tel_clean = re.sub(r'\D', '', tel_raw)
                 if tel_clean and not tel_clean.startswith('54'):
                     tel_clean = '54' + tel_clean
                 
                 web = det.get('website', '')
-                # Scraping básico (rápido)
                 contacto = scraping_profundo_contacto(web) if web else {"email": "", "facebook": "", "instagram": ""}
 
                 leads.append({
@@ -164,12 +151,12 @@ def search_places():
 
 @app.route('/start_email_campaign', methods=['POST'])
 def start_email_campaign():
-    """Inicia el envío de correos y transmite el progreso en tiempo real."""
+    """Inicia el envío de correos y transmite el progreso."""
     data = request.json
     selected = data.get('leads', [])
     user = data.get('email_user')
     password = data.get('email_pass')
-    subject = data.get('subject', 'Oferta Mayorista - Yerba Mate Soberanía')
+    subject = data.get('subject', 'Yerba Mate Soberanía - Oferta Mayorista')
     body = data.get('body')
     attach_img = str(data.get('attach_image')).lower() == 'true'
 
@@ -178,25 +165,15 @@ def start_email_campaign():
         yield f"data: {json.dumps({'status': 'start', 'total': total})}\n\n"
         
         for i, lead in enumerate(selected):
-            # Pausa aleatoria para evitar ser detectado como SPAM por Gmail
             if i > 0:
-                time.sleep(random.randint(4, 7))
+                time.sleep(random.randint(4, 6))
             
-            # Personalizar nombre en el cuerpo si se desea
-            cuerpo_personalizado = body.replace('{nombre}', lead['nombre'])
+            cuerpo_p = body.replace('{nombre}', lead['nombre'])
+            ok, msg = enviar_mail_soberania(user, password, lead['email'], subject, cuerpo_p, attach_img)
             
-            ok, msg = enviar_mail_soberania(user, password, lead['email'], subject, cuerpo_personalizado, attach_img)
-            
-            # Preparar objeto de actualización
-            update_info = {
-                'progress': i+1, 
-                'msg': msg, 
-                'index': lead.get('original_index'), 
-                'success': ok
-            }
-            
-            # Enviar actualización al frontend (f-string simple para Python 3.11)
-            yield f"data: {json.dumps(update_info)}\n\n"
+            # Formato compatible con Python 3.11 (sin saltos de línea dentro de f-string)
+            update_data = {'progress': i+1, 'msg': msg, 'index': lead.get('original_index'), 'success': ok}
+            yield f"data: {json.dumps(update_data)}\n\n"
         
         yield f"data: {json.dumps({'status': 'finished'})}\n\n"
         
@@ -204,9 +181,10 @@ def start_email_campaign():
 
 @app.route('/api/ai_query', methods=['POST'])
 def ai_query():
-    """Proxy seguro para conectar con Gemini API."""
+    """Proxy para Gemini con logging mejorado."""
     if not GEMINI_API_KEY:
-        return jsonify({'error': 'Variable GEMINI_API_KEY no configurada en Render'}), 500
+        print("ERROR: GEMINI_API_KEY no encontrada")
+        return jsonify({'error': 'Variable GEMINI_API_KEY no configurada'}), 500
     
     data = request.json
     prompt = data.get('prompt')
@@ -219,16 +197,22 @@ def ai_query():
     }
 
     try:
-        res = requests.post(url, json=payload, timeout=25)
+        res = requests.post(url, json=payload, timeout=20)
         result = res.json()
-        if 'candidates' in result:
+        
+        if res.status_code != 200:
+            print(f"Gemini API Error {res.status_code}: {result}")
+            return jsonify({'error': 'Error de la API de Google'}), 500
+
+        if 'candidates' in result and len(result['candidates']) > 0:
             text = result['candidates'][0]['content']['parts'][0]['text']
             return jsonify({'text': text})
-        return jsonify({'error': 'Respuesta vacía de la IA'}), 500
+            
+        return jsonify({'error': 'Respuesta vacía o bloqueada por seguridad'}), 500
     except Exception as e:
-        return jsonify({'error': f"Error de conexión con IA: {str(e)}"}), 500
+        print(f"Excepción en ai_query: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    # Puerto dinámico para Render
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
