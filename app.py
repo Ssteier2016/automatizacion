@@ -187,13 +187,16 @@ def start_email_campaign():
             
             ok, msg = enviar_mail_soberania(user, password, lead['email'], subject, cuerpo_personalizado, attach_img)
             
-            # Enviar actualización al frontend
-            yield f"data: {json.dumps({
+            # Preparar objeto de actualización
+            update_info = {
                 'progress': i+1, 
                 'msg': msg, 
                 'index': lead.get('original_index'), 
                 'success': ok
-            })}\n\n"
+            }
+            
+            # Enviar actualización al frontend (f-string simple para Python 3.11)
+            yield f"data: {json.dumps(update_info)}\n\n"
         
         yield f"data: {json.dumps({'status': 'finished'})}\n\n"
         
