@@ -44,17 +44,13 @@ def validar_email(email):
     return bool(re.match(patron, email))
 
 def scraping_profundo_contacto(url_base, exhaustivo=False):
-    """
-    Busca correos electrónicos y redes sociales analizando la web.
-    Optimizado para evitar Timeouts en Render.
-    """
+    """Busca correos electrónicos y redes sociales analizando la web."""
     info = {"email": "", "facebook": "", "instagram": ""}
     if not url_base or not url_base.startswith('http'):
         return info
     
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'}
     try:
-        # Timeout bajo para evitar bloqueos del worker en Render
         res = requests.get(url_base, timeout=6, headers=headers)
         if res.status_code != 200: return info
         
@@ -72,12 +68,10 @@ def scraping_profundo_contacto(url_base, exhaustivo=False):
             if 'instagram.com' in href and not info["instagram"]:
                 info["instagram"] = a['href']
             
-            # Si es exhaustivo, buscamos páginas de contacto
             if exhaustivo and any(term in href for term in ['contacto', 'contact', 'nosotros', 'about', 'info']):
                 links_to_check.append(h_full)
 
         if exhaustivo:
-            # Limitado para evitar Timeouts de 30s de Render
             for link in list(set(links_to_check))[:2]:
                 try:
                     r_sub = requests.get(link, timeout=4, headers=headers)
@@ -85,7 +79,6 @@ def scraping_profundo_contacto(url_base, exhaustivo=False):
                 except:
                     pass
 
-        # Filtrar extensiones basura y validar
         for e in found_emails:
             if validar_email(e) and not e.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.pdf', '.css')):
                 info["email"] = e.lower()
@@ -95,104 +88,80 @@ def scraping_profundo_contacto(url_base, exhaustivo=False):
     return info
 
 def enviar_mail_soberania(smtp_user, smtp_pass, destino, asunto, cuerpo, imagen_url):
-    """
-    Lógica de envío SMTP. Descarga la imagen de GitHub y la adjunta como archivo real.
-    """
-    msg = MIMEMultipart()
-    msg['From'] = f"Juan Ignacio Lewczuk <{smtp_user}>"
-    msg['To'] = destino
-    msg['Subject'] = asunto
-    msg.attach(MIMEText(cuerpo, 'plain'))
-
-    # Manejo de la imagen adjunta (Prioriza link de GitHub)
-    img_data = None
-    if imagen_url:
-        try:
-            # Convertimos el link de GitHub blob en RAW para que sea descargable por el servidor
-            raw_url = imagen_url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
-            img_data = requests.get(raw_url, timeout=12).content
-        except Exception as e:
-            print(f"Error adjuntando imagen desde URL: {e}")
-
-    if not img_data and os.path.exists('producto.png'):
-        # Fallback a archivo local si existe
-        try:
-            with open('producto.png', 'rb') as f:
-                img_data = f.read()
-        except: pass
-
-    if img_data:
-        try:
-            adjunto = MIMEImage(img_data)
-            adjunto.add_header('Content-Disposition', 'attachment', filename="Yerba_Mate_Soberania.png")
-            msg.attach(adjunto)
-        except: pass
-
+    """Lógica de envío SMTP con descarga de imagen adjunta y manejo de errores detallado."""
     try:
+        msg = MIMEMultipart()
+        msg['From'] = f"Juan Ignacio Lewczuk <{smtp_user}>"
+        msg['To'] = destino
+        msg['Subject'] = asunto
+        msg.attach(MIMEText(cuerpo, 'plain'))
+
+        img_data = None
+        if imagen_url:
+            try:
+                raw_url = imagen_url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
+                img_data = requests.get(raw_url, timeout=12).content
+            except Exception as e:
+                print(f"Error descargando imagen de GitHub: {e}")
+
+        if not img_data and os.path.exists('producto.png'):
+            try:
+                with open('producto.png', 'rb') as f:
+                    img_data = f.read()
+            except: pass
+
+        if img_data:
+            try:
+                adjunto = MIMEImage(img_data)
+                adjunto.add_header('Content-Disposition', 'attachment', filename="Yerba_Mate_Soberania.png")
+                msg.attach(adjunto)
+            except: pass
+
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
         server.login(smtp_user, smtp_pass)
         server.sendmail(smtp_user, destino, msg.as_string())
         server.quit()
         return True, "Enviado correctamente"
+    except smtplib.SMTPAuthenticationError:
+        return False, "Autenticación fallida: Revisa tu clave de 16 letras"
     except Exception as e:
         return False, str(e)
 
 @app.route('/')
 def index():
-    """Sirve la interfaz principal."""
     return render_template('index.html')
 
 @app.route('/search_places', methods=['POST'])
 def search_places():
-    """Busca dietéticas y extrae emails + redes sociales."""
     data = request.json
     zona = data.get('zona')
     exhaustivo = data.get('exhaustivo', False)
-    
-    if not gmaps:
-        return jsonify({'error': 'Google Maps API no configurada'}), 500
-    
+    if not gmaps: return jsonify({'error': 'Google Maps API no configurada'}), 500
     try:
         response = gmaps.places(query=f"dieteticas en {zona}")
         results = response.get('results', [])
-        
         leads = []
-        # Limitamos a 15 para garantizar calidad y evitar Timeouts en Render
-        for p in results[:15]:
+        for p in results[:15]: # Límite para evitar Timeouts
             try:
-                det = gmaps.place(place_id=p['place_id'], 
-                                  fields=['name', 'formatted_address', 'formatted_phone_number', 'website'])['result']
-                
+                det = gmaps.place(place_id=p['place_id'], fields=['name', 'formatted_address', 'formatted_phone_number', 'website'])['result']
                 tel_raw = det.get('formatted_phone_number', '')
                 tel_clean = re.sub(r'\D', '', tel_raw)
-                if tel_clean and not tel_clean.startswith('54'):
-                    tel_clean = '54' + tel_clean
-                
+                if tel_clean and not tel_clean.startswith('54'): tel_clean = '54' + tel_clean
                 web = det.get('website', '')
                 contacto = scraping_profundo_contacto(web, exhaustivo) if web else {"email": "", "facebook": "", "instagram": ""}
-
                 leads.append({
-                    'id': p['place_id'],
-                    'nombre': det.get('name'),
-                    'direccion': det.get('formatted_address'),
-                    'telefono': tel_clean,
-                    'tel_display': tel_raw,
-                    'email': contacto["email"],
-                    'facebook': contacto["facebook"],
-                    'instagram': contacto["instagram"],
-                    'web': web
+                    'id': p['place_id'], 'nombre': det.get('name'), 'direccion': det.get('formatted_address'),
+                    'telefono': tel_clean, 'tel_display': tel_raw, 'email': contacto["email"],
+                    'facebook': contacto["facebook"], 'instagram': contacto["instagram"], 'web': web
                 })
-            except:
-                continue
-
+            except: continue
         return jsonify({'success': True, 'leads': leads})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/start_email_campaign', methods=['POST'])
 def start_email_campaign():
-    """Procesa la campaña y transmite el progreso vía SSE."""
     data = request.json
     selected = data.get('leads', [])
     user = data.get('email_user')
@@ -204,51 +173,33 @@ def start_email_campaign():
     def generate():
         total = len(selected)
         yield f"data: {json.dumps({'status': 'start', 'total': total})}\n\n"
-        
         for i, lead in enumerate(selected):
-            # Pausa humana anti-spam de Google
-            if i > 0:
-                time.sleep(random.randint(25, 45))
+            # Pausa para evitar que Gmail bloquee la cuenta
+            if i > 0: time.sleep(random.randint(25, 40))
             
-            cuerpo_p = body.replace('{nombre}', lead['nombre']).replace('{direccion}', lead['direccion'])
-            asunto_p = subject.replace('{nombre}', lead['nombre'])
+            cuerpo_final = body.replace('{nombre}', lead['nombre']).replace('{direccion}', lead['direccion'])
+            asunto_final = subject.replace('{nombre}', lead['nombre'])
             
-            ok, msg = enviar_mail_soberania(user, password, lead['email'], asunto_p, cuerpo_p, image_url)
+            ok, msg = enviar_mail_soberania(user, password, lead['email'], asunto_final, cuerpo_final, image_url)
             
-            # Diccionario separado para evitar SyntaxError en Python 3.11
-            res_info = {
-                'progress': i+1, 
-                'msg': msg, 
-                'index': lead.get('original_index'), 
-                'success': ok
-            }
+            res_info = {'progress': i+1, 'msg': msg, 'index': lead.get('original_index'), 'success': ok}
             yield f"data: {json.dumps(res_info)}\n\n"
-        
         yield f"data: {json.dumps({'status': 'finished'})}\n\n"
         
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 @app.route('/api/ai_query', methods=['POST'])
 def ai_query():
-    """Proxy para consultas a Gemini."""
-    if not GEMINI_API_KEY:
-        return jsonify({'error': 'Variable GEMINI_API_KEY no configurada'}), 500
-    
+    if not GEMINI_API_KEY: return jsonify({'error': 'Variable GEMINI_API_KEY no configurada'}), 500
     data = request.json
-    prompt = data.get('prompt')
-    system_instruction = data.get('systemInstruction', 'Eres un experto en ventas B2B.')
-
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={GEMINI_API_KEY}"
     payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "systemInstruction": {"parts": [{"text": system_instruction}]}
+        "contents": [{"parts": [{"text": data.get('prompt')}]}],
+        "systemInstruction": {"parts": [{"text": data.get('systemInstruction', 'Eres un experto en ventas.')}]}
     }
-
     try:
         res = requests.post(url, json=payload, timeout=25)
-        if res.status_code == 429:
-            return jsonify({'error': 'QUOTA_EXCEEDED', 'retry_after': 15}), 429
-        
+        if res.status_code == 429: return jsonify({'error': 'QUOTA_EXCEEDED', 'retry_after': 20}), 429
         result = res.json()
         if 'candidates' in result:
             text = result['candidates'][0]['content']['parts'][0]['text']
