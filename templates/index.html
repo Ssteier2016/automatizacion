@@ -21,7 +21,92 @@
         .ai-button:hover { transform: scale(1.02); filter: brightness(1.1); }
         .ai-loading { animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
-        .campaign-button { background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); }
+        
+        /* ESTILOS PARA EL TUTORIAL EXTENSIVO - CARTELES PEQUEÑOS */
+        .tutorial-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+            display: none;
+        }
+        .tutorial-card-mini {
+            position: absolute;
+            background: rgba(15, 23, 42, 0.98);
+            backdrop-filter: blur(8px);
+            border: 1.5px solid #10b981;
+            border-radius: 16px;
+            padding: 16px 20px;
+            width: 280px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);
+            pointer-events: auto;
+            color: #e2e8f0;
+            font-size: 12px;
+            line-height: 1.5;
+            transition: all 0.3s ease;
+            animation: slideIn 0.4s ease;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .tutorial-arrow {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: #10b981;
+            clip-path: polygon(0% 0%, 100% 50%, 0% 100%);
+        }
+        .tutorial-dots {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            justify-content: center;
+        }
+        .tutorial-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #334155;
+            transition: all 0.2s ease;
+        }
+        .tutorial-dot.active {
+            background: #10b981;
+            transform: scale(1.2);
+        }
+        .tutorial-highlight {
+            position: relative;
+            z-index: 10000 !important;
+            box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.6);
+            border-radius: 12px;
+            transition: box-shadow 0.3s ease;
+            pointer-events: auto !important;
+        }
+        
+        /* EMAIL CLICKABLE */
+        .email-cell {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .email-cell:hover {
+            background-color: rgba(16, 185, 129, 0.1);
+        }
+        .email-cell.selected {
+            background-color: rgba(16, 185, 129, 0.2);
+            border-left: 3px solid #10b981;
+        }
+        
+        /* IMAGEN EN EL CUERPO DEL EMAIL */
+        .product-image-preview {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            margin: 15px 0;
+            border: 2px solid #1e293b;
+        }
     </style>
 </head>
 <body class="bg-[#020617] text-slate-200 font-sans overflow-hidden">
@@ -40,7 +125,7 @@
             </div>
 
             <!-- 1. BUSCADOR -->
-            <div id="step-1" class="space-y-4 pt-4 rounded-2xl transition-all duration-300">
+            <div id="tutorial-step-1" class="space-y-4 pt-4 rounded-2xl transition-all duration-300">
                 <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2">1. Localización</h3>
                 <div class="flex gap-2">
                     <input type="text" id="zona" placeholder="Ej: Morón, Buenos Aires" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-2xl text-sm outline-none focus:border-emerald-500 transition">
@@ -53,41 +138,42 @@
                 </button>
             </div>
 
-            <!-- 2. WHATSAPP CONFIG -->
-            <div id="step-2" class="space-y-4 pt-4 rounded-2xl transition-all duration-300">
+            <!-- 2. WHATSAPP CONFIG - AHORA UNO POR UNO -->
+            <div id="tutorial-step-2" class="space-y-4 pt-4 rounded-2xl transition-all duration-300">
                 <div class="flex justify-between items-center border-b border-emerald-900/30 pb-2">
-                    <h3 class="text-[10px] font-black text-emerald-500 uppercase tracking-widest">2. WhatsApp</h3>
+                    <h3 class="text-[10px] font-black text-emerald-500 uppercase tracking-widest">2. WhatsApp Uno por Uno</h3>
                     <button onclick="generarPitchIA()" id="btnPitchIA" class="text-[9px] font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1">
                         ✨ Sugerir Texto
                     </button>
                 </div>
                 <div class="space-y-3">
                     <select id="waVersion" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-xs outline-none focus:border-emerald-500">
-                        <option value="web">WhatsApp Web (Navegador)</option>
-                        <option value="app">App Messenger / Business</option>
+                        <option value="web">WhatsApp Web (Escritorio)</option>
+                        <option value="app">WhatsApp Mobile (App)</option>
                     </select>
 
                     <label class="text-[9px] font-bold text-slate-500 uppercase px-1">Mensaje ({nombre})</label>
                     <textarea id="waBody" rows="3" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-[10px] outline-none focus:border-emerald-500 resize-none transition-all">Hola {nombre}, ¿cómo estás? Te escribo de Yerba Mate Soberanía para enviarte nuestra lista de precios mayorista.</textarea>
                     
-                    <button onclick="iniciarWhatsAppMasivo()" class="w-full bg-emerald-600 text-white font-black py-3 rounded-xl hover:bg-emerald-500 transition flex items-center justify-center gap-2 text-xs uppercase shadow-lg">
-                        <i class="fa-brands fa-whatsapp text-lg"></i> Iniciar Envío WA
+                    <button onclick="iniciarWhatsAppSecuencial()" id="btnWhatsAppSecuencial" class="w-full bg-emerald-600 text-white font-black py-3 rounded-xl hover:bg-emerald-500 transition flex items-center justify-center gap-2 text-xs uppercase shadow-lg">
+                        <i class="fa-brands fa-whatsapp text-lg"></i> Iniciar Envío Secuencial
                     </button>
+                    <p class="text-[8px] text-slate-500 italic text-center">Se abrirá una ventana a la vez. Tú aprietas "Enviar" y continúa automáticamente.</p>
                 </div>
             </div>
 
-            <!-- 3. EMAIL CONFIG -->
-            <div id="step-email" class="space-y-4 pt-4">
-                <h3 class="text-[10px] font-black text-blue-500 uppercase tracking-widest border-b border-blue-900/30 pb-2">3. Configurar Email</h3>
+            <!-- 3. EMAIL CONFIG - CAMPAÑA UNIFICADA -->
+            <div id="tutorial-step-3" class="space-y-4 pt-4">
+                <h3 class="text-[10px] font-black text-blue-500 uppercase tracking-widest border-b border-blue-900/30 pb-2">3. Campaña de Emails</h3>
                 <div class="space-y-3">
                     <input type="email" id="emailUser" placeholder="Tu Gmail (ejemplo@gmail.com)" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-[10px] outline-none">
                     
                     <div class="space-y-1">
                         <div class="flex justify-between items-center px-1">
-                            <label class="text-[9px] font-bold text-slate-500 uppercase">Clave de Seguridad</label>
-                            <button onclick="toggleGuiaEmail()" class="text-blue-500 text-[9px] font-bold hover:underline italic">Configurar!</button>
+                            <label class="text-[9px] font-bold text-slate-500 uppercase">Clave de Aplicación (16 letras)</label>
+                            <button onclick="toggleGuiaEmail()" class="text-blue-500 text-[9px] font-bold hover:underline italic">¿Cómo obtenerla?</button>
                         </div>
-                        <input type="password" id="emailPass" placeholder="Clave de 16 letras" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-[10px] outline-none focus:border-blue-500">
+                        <input type="password" id="emailPass" placeholder="xxxx xxxx xxxx xxxx (sin espacios)" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-[10px] outline-none focus:border-blue-500">
                         
                         <div id="guiaEmail" class="app-password-guide space-y-3">
                             <p class="font-bold text-blue-400 border-b border-blue-900/30 pb-1">Pasos Rápidos:</p>
@@ -96,12 +182,15 @@
                                 <li>Inicia sesión con tu Gmail.</li>
                                 <li>En "Nombre", pon <span class="text-white font-bold">CRM Soberanía</span>.</li>
                                 <li>Dale clic a <span class="text-white font-bold">Crear</span>.</li>
-                                <li>Copia el código <span class="text-yellow-400 font-bold">amarillo</span> y pégalo arriba.</li>
+                                <li>Copia el código <span class="text-yellow-400 font-bold">amarillo</span> y pégalo arriba <span class="text-red-400">SIN ESPACIOS</span>.</li>
                             </ol>
                         </div>
                     </div>
 
-                    <label class="text-[9px] font-bold text-slate-500 uppercase px-1">Cuerpo del Email</label>
+                    <label class="text-[9px] font-bold text-slate-500 uppercase px-1 flex justify-between">
+                        <span>Cuerpo del Email</span>
+                        <span class="text-emerald-500">✅ Se adjuntará producto.png automáticamente</span>
+                    </label>
                     <textarea id="emailBody" rows="12" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-[10px] outline-none focus:border-blue-500 resize-none transition-all">Hola, buen día:
 
 Mi nombre es Juan Ignacio Lewczuk y me comunico con {nombre} ubicado en {direccion} para ofrecerles Yerba Mate Soberanía para venta por mayor en dietéticas y comercios naturales.
@@ -114,6 +203,8 @@ Ofrecemos:
 - Formatos ideales para dietéticas
 - Posibilidad de compras recurrentes
 
+Adjunto imagen de nuestro producto para que conozcas su presentación.
+
 Quedo a disposición para enviarles lista de precios, condiciones de venta o coordinar un primer pedido de prueba.
 
 Muchas gracias por su tiempo.
@@ -123,11 +214,26 @@ Juan Ignacio Lewczuk
 📱 WhatsApp: 11 3134-4552
 ✉️ Email: lewczukjuani@gmail.com</textarea>
 
-                    <!-- BOTÓN UNIFICADO DE CAMPAÑA -->
-                    <button onclick="iniciarCampanaCompleta()" id="btnCampanaCompleta" class="w-full campaign-button text-white font-black py-4 rounded-xl hover:brightness-110 transition flex items-center justify-center gap-2 text-xs uppercase shadow-lg">
-                        <i class="fa-solid fa-rocket"></i> ENVIAR CAMPAÑA COMPLETA
+                    <!-- VISTA PREVIA DE LA IMAGEN QUE SE ADJUNTARÁ -->
+                    <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-700">
+                        <p class="text-[9px] text-slate-400 mb-2">📸 Vista previa del adjunto:</p>
+                        <img id="productImagePreview" src="/producto.png" alt="Producto Soberanía" class="product-image-preview max-h-[100px]" onerror="this.style.display='none'">
+                        <p class="text-[8px] text-slate-500 mt-1">* La imagen se adjuntará automáticamente al email</p>
+                    </div>
+
+                    <!-- BOTÓN ÚNICO PARA CAMPAÑA DE EMAILS -->
+                    <button onclick="iniciarCampanaEmails()" id="btnCampanaEmails" class="w-full bg-blue-600 text-white font-black py-4 rounded-xl hover:bg-blue-500 transition flex items-center justify-center gap-2 text-xs uppercase shadow-lg">
+                        <i class="fa-solid fa-envelope"></i> ENVIAR CAMPAÑA DE EMAILS
                     </button>
+                    <p class="text-[8px] text-slate-500 italic text-center">Se enviarán SOLO a los emails seleccionados (haz clic en la columna de email)</p>
                 </div>
+            </div>
+            
+            <!-- BOTÓN DE AYUDA / TUTORIAL -->
+            <div class="pt-4 border-t border-slate-800 mt-4">
+                <button onclick="iniciarTutorial()" class="w-full bg-slate-800 text-white font-bold py-2 rounded-xl text-[9px] uppercase hover:bg-slate-700 transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-question-circle"></i> GUÍA INTERACTIVA
+                </button>
             </div>
         </aside>
 
@@ -135,7 +241,7 @@ Juan Ignacio Lewczuk
         <main class="flex-1 p-4 lg:p-8 flex flex-col overflow-visible">
             <div class="bg-[#0b1120] rounded-[2rem] border border-slate-800 shadow-2xl flex flex-col flex-1 min-h-[500px]">
                 <div class="px-8 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/40 sticky top-0 z-10 rounded-t-[2rem]">
-                    <div id="step-3" class="flex items-center gap-4 rounded-xl p-1 transition-all duration-300">
+                    <div id="tutorial-step-4" class="flex items-center gap-4 rounded-xl p-1 transition-all duration-300">
                         <input type="checkbox" id="selectAll" onclick="toggleAll()">
                         <h2 class="text-xs font-bold uppercase tracking-widest text-slate-400">Resultados</h2>
                     </div>
@@ -149,7 +255,7 @@ Juan Ignacio Lewczuk
                                 <th class="px-6 py-4 w-10 text-center">Sel</th>
                                 <th>Comercio</th>
                                 <th class="text-center">WhatsApp</th>
-                                <th>Email</th>
+                                <th id="tutorial-step-5" class="px-6 py-4">Email (CLICK PARA SELECCIONAR)</th>
                                 <th class="text-center">Redes</th>
                                 <th class="text-center">Estado</th>
                             </tr>
@@ -177,43 +283,262 @@ Juan Ignacio Lewczuk
         </div>
     </div>
 
-    <!-- MODAL WHATSAPP -->
+    <!-- MODAL WHATSAPP SECUENCIAL -->
     <div id="waModal" class="modal flex items-center justify-center p-6" style="display: none;">
         <div class="bg-slate-900 border border-slate-700 w-full max-w-sm p-8 rounded-[2.5rem] shadow-2xl text-center space-y-5">
             <i class="fa-brands fa-whatsapp text-emerald-500 text-5xl"></i>
             <div>
-                <h2 id="modalTitle" class="text-lg font-black text-white uppercase italic">Enviando...</h2>
-                <p id="modalProgress" class="text-[10px] text-slate-400 mt-1">Cola activa.</p>
+                <h2 id="modalTitle" class="text-lg font-black text-white uppercase italic">Enviando WhatsApp...</h2>
+                <p id="modalProgress" class="text-[10px] text-slate-400 mt-1">Preparando chat</p>
+                <p id="modalInstructions" class="text-[9px] text-emerald-400 mt-2">1. Aparecerá una ventana de WhatsApp<br>2. TÚ debes presionar ENVIAR<br>3. La ventana se reciclará automáticamente</p>
             </div>
             <div class="flex gap-2">
-                <button onclick="cerrarModal()" class="flex-1 bg-slate-800 text-slate-400 font-bold py-3 rounded-xl text-[10px] uppercase hover:bg-slate-700 transition">Detener</button>
-                <button onclick="abrirSiguienteWA()" id="btnSiguiente" class="flex-1 bg-emerald-600 text-white font-black py-3 rounded-xl text-[10px] uppercase shadow-lg hover:bg-emerald-500 transition">Abrir Chat</button>
+                <button onclick="cerrarModalWA()" class="flex-1 bg-slate-800 text-slate-400 font-bold py-3 rounded-xl text-[10px] uppercase hover:bg-slate-700 transition">Detener</button>
+                <button onclick="abrirSiguienteWASecuencial()" id="btnSiguienteWA" class="flex-1 bg-emerald-600 text-white font-black py-3 rounded-xl text-[10px] uppercase shadow-lg hover:bg-emerald-500 transition">
+                    <i class="fa-brands fa-whatsapp"></i> Abrir Chat
+                </button>
             </div>
         </div>
     </div>
 
-    <!-- MODAL CAMPAÑA -->
-    <div id="campanaModal" class="modal flex items-center justify-center p-6" style="display: none;">
-        <div class="bg-slate-900 border border-amber-600 w-full max-w-lg p-8 rounded-[2.5rem] shadow-2xl space-y-6">
+    <!-- MODAL PROGRESO EMAILS -->
+    <div id="emailProgressModal" class="modal flex items-center justify-center p-6" style="display: none;">
+        <div class="bg-slate-900 border border-blue-600 w-full max-w-lg p-8 rounded-[2.5rem] shadow-2xl space-y-6">
             <div class="flex items-center gap-3 border-b border-slate-800 pb-3">
-                <i class="fa-solid fa-rocket text-amber-500 text-2xl"></i>
-                <h2 class="text-lg font-black text-white uppercase italic">Campaña Completa</h2>
+                <i class="fa-solid fa-envelope-circle-check text-blue-500 text-2xl"></i>
+                <h2 class="text-lg font-black text-white uppercase italic">Enviando Emails</h2>
             </div>
-            <div id="campanaResponseContent" class="text-xs text-slate-300 leading-relaxed overflow-y-auto max-h-[300px] custom-scroll whitespace-pre-wrap">
-                Iniciando campaña unificada...
+            <div id="emailProgressContent" class="text-xs text-slate-300 leading-relaxed overflow-y-auto max-h-[300px] custom-scroll whitespace-pre-wrap">
+                Iniciando campaña de emails...
             </div>
-            <button onclick="cerrarCampanaModal()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl text-[10px] uppercase hover:bg-slate-700 transition">Cerrar</button>
+            <div id="emailProgressBar" class="w-full bg-slate-800 rounded-full h-2.5">
+                <div id="emailProgressFill" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%;"></div>
+            </div>
+            <p id="emailProgressText" class="text-[9px] text-slate-400 text-center">0% completado</p>
+            <button onclick="cerrarEmailModal()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl text-[10px] uppercase hover:bg-slate-700 transition">Cerrar</button>
         </div>
+    </div>
+
+    <!-- TUTORIAL EXTENSIVO - CARTELES PEQUEÑOS -->
+    <div id="tutorialOverlay" class="tutorial-overlay">
+        <!-- Los carteles se generarán dinámicamente con JavaScript -->
     </div>
 
     <script>
-        let leads = []; let waCola = []; let waCursor = 0;
+        // VARIABLES GLOBALES
+        let leads = []; 
+        let waCola = []; 
+        let waCursor = 0;
+        let waWindow = null; // Ventana de WhatsApp reutilizable
         let revelandoEmails = false;
+        
+        // VARIABLES PARA TUTORIAL
+        let tutorialActivo = false;
+        let tutorialPaso = 0;
+        const tutorialPasos = [
+            {
+                elemento: 'tutorial-step-1',
+                titulo: '🔍 PASO 1: BUSCAR COMERCIOS',
+                texto: 'Ingresa una zona (ej: "Morón, Buenos Aires") y presiona el botón de búsqueda. El sistema encontrará dietéticas y comercios naturales.',
+                posicion: 'right'
+            },
+            {
+                elemento: 'btnAnalizarIA',
+                titulo: '✨ PASO 2: ANÁLISIS CON IA',
+                texto: 'Después de la búsqueda, aparecerá este botón. La IA analizará los comercios y te dará consejos de venta personalizados.',
+                posicion: 'right'
+            },
+            {
+                elemento: 'tutorial-step-2',
+                titulo: '📱 PASO 3: WHATSAPP SECUENCIAL',
+                texto: 'Selecciona los comercios y haz clic aquí. Se abrirá UNA ventana de WhatsApp a la vez. TÚ presionas "Enviar" y automáticamente pasa al siguiente.',
+                posicion: 'right'
+            },
+            {
+                elemento: 'tutorial-step-3',
+                titulo: '📧 PASO 4: CONFIGURAR EMAIL',
+                texto: 'Ingresa tu Gmail y la CLAVE DE APLICACIÓN (16 caracteres SIN ESPACIOS). El sistema adjuntará automáticamente la imagen "producto.png".',
+                posicion: 'right'
+            },
+            {
+                elemento: 'tutorial-step-5',
+                titulo: '✅ PASO 5: SELECCIONAR EMAILS',
+                texto: 'HAZ CLIC directamente sobre el email del comercio para seleccionarlo (se pondrá verde). También puedes usar el checkbox general.',
+                posicion: 'bottom'
+            },
+            {
+                elemento: 'btnCampanaEmails',
+                titulo: '🚀 PASO 6: ENVIAR CAMPAÑA',
+                texto: '¡Todo listo! Presiona este botón para enviar los emails SOLO a los contactos que seleccionaste. El progreso se verá en tiempo real.',
+                posicion: 'right'
+            }
+        ];
 
-        window.onload = () => {
-            // Tutorial eliminado - no se abre ninguna ventana automática
-        };
+        // ========== FUNCIONES DEL TUTORIAL ==========
+        function iniciarTutorial() {
+            if (tutorialActivo) {
+                cerrarTutorial();
+                setTimeout(() => iniciarTutorialPasos(), 300);
+            } else {
+                iniciarTutorialPasos();
+            }
+        }
 
+        function iniciarTutorialPasos() {
+            tutorialActivo = true;
+            tutorialPaso = 0;
+            const overlay = document.getElementById('tutorialOverlay');
+            overlay.style.display = 'block';
+            mostrarPasoTutorial();
+        }
+
+        function mostrarPasoTutorial() {
+            if (!tutorialActivo) return;
+            
+            const paso = tutorialPasos[tutorialPaso];
+            if (!paso) {
+                cerrarTutorial();
+                return;
+            }
+
+            const overlay = document.getElementById('tutorialOverlay');
+            overlay.innerHTML = '';
+            
+            // Crear tarjeta del tutorial
+            const card = document.createElement('div');
+            card.className = 'tutorial-card-mini';
+            card.id = 'tutorialCard';
+            
+            // Posicionar la tarjeta cerca del elemento
+            const elemento = document.getElementById(paso.elemento);
+            if (elemento) {
+                const rect = elemento.getBoundingClientRect();
+                elemento.classList.add('tutorial-highlight');
+                
+                // Posicionar según configuración
+                if (paso.posicion === 'right') {
+                    card.style.left = (rect.right + 20) + 'px';
+                    card.style.top = rect.top + 'px';
+                } else if (paso.posicion === 'bottom') {
+                    card.style.left = rect.left + 'px';
+                    card.style.top = (rect.bottom + 20) + 'px';
+                } else if (paso.posicion === 'top') {
+                    card.style.left = rect.left + 'px';
+                    card.style.top = (rect.top - card.offsetHeight - 20) + 'px';
+                } else {
+                    card.style.left = (rect.right - 280) + 'px';
+                    card.style.top = (rect.bottom + 20) + 'px';
+                }
+                
+                // Flecha
+                const arrow = document.createElement('div');
+                arrow.className = 'tutorial-arrow';
+                if (paso.posicion === 'right') {
+                    arrow.style.left = '-10px';
+                    arrow.style.top = '20px';
+                    arrow.style.transform = 'rotate(180deg)';
+                } else if (paso.posicion === 'bottom') {
+                    arrow.style.left = '20px';
+                    arrow.style.top = '-10px';
+                    arrow.style.transform = 'rotate(90deg)';
+                }
+                card.appendChild(arrow);
+            }
+            
+            // Contenido
+            const titulo = document.createElement('h3');
+            titulo.className = 'font-black text-emerald-500 text-xs uppercase mb-2';
+            titulo.innerText = paso.titulo;
+            
+            const texto = document.createElement('p');
+            texto.className = 'text-[11px] text-slate-300 leading-relaxed mb-4';
+            texto.innerText = paso.texto;
+            
+            // Dots de progreso
+            const dotsContainer = document.createElement('div');
+            dotsContainer.className = 'tutorial-dots';
+            for (let i = 0; i < tutorialPasos.length; i++) {
+                const dot = document.createElement('div');
+                dot.className = `tutorial-dot ${i === tutorialPaso ? 'active' : ''}`;
+                dotsContainer.appendChild(dot);
+            }
+            
+            // Botones
+            const botones = document.createElement('div');
+            botones.className = 'flex justify-between items-center mt-4';
+            
+            const btnAnterior = document.createElement('button');
+            btnAnterior.className = 'text-slate-400 text-[9px] font-bold hover:text-white transition px-3 py-1.5 rounded-lg';
+            btnAnterior.innerText = '◀ ANTERIOR';
+            btnAnterior.onclick = (e) => { e.stopPropagation(); pasoAnteriorTutorial(); };
+            if (tutorialPaso === 0) btnAnterior.style.visibility = 'hidden';
+            
+            const btnSiguiente = document.createElement('button');
+            btnSiguiente.className = 'bg-emerald-600 text-white font-black px-4 py-1.5 rounded-lg text-[9px] uppercase hover:bg-emerald-500 transition';
+            btnSiguiente.innerText = (tutorialPaso === tutorialPasos.length - 1) ? 'FINALIZAR ▶' : 'SIGUIENTE ▶';
+            btnSiguiente.onclick = (e) => { e.stopPropagation(); pasoSiguienteTutorial(); };
+            
+            const btnCerrar = document.createElement('button');
+            btnCerrar.className = 'text-red-500 text-[9px] font-bold hover:text-red-400 transition px-3 py-1.5 rounded-lg';
+            btnCerrar.innerText = '✕ CERRAR';
+            btnCerrar.onclick = (e) => { e.stopPropagation(); cerrarTutorial(); };
+            
+            botones.appendChild(btnAnterior);
+            botones.appendChild(btnSiguiente);
+            botones.appendChild(btnCerrar);
+            
+            card.appendChild(titulo);
+            card.appendChild(texto);
+            card.appendChild(dotsContainer);
+            card.appendChild(botones);
+            
+            overlay.appendChild(card);
+        }
+
+        function pasoSiguienteTutorial() {
+            // Quitar highlight del elemento actual
+            const pasoActual = tutorialPasos[tutorialPaso];
+            if (pasoActual) {
+                const el = document.getElementById(pasoActual.elemento);
+                if (el) el.classList.remove('tutorial-highlight');
+            }
+            
+            tutorialPaso++;
+            if (tutorialPaso >= tutorialPasos.length) {
+                cerrarTutorial();
+            } else {
+                mostrarPasoTutorial();
+            }
+        }
+
+        function pasoAnteriorTutorial() {
+            // Quitar highlight del elemento actual
+            const pasoActual = tutorialPasos[tutorialPaso];
+            if (pasoActual) {
+                const el = document.getElementById(pasoActual.elemento);
+                if (el) el.classList.remove('tutorial-highlight');
+            }
+            
+            tutorialPaso--;
+            if (tutorialPaso < 0) tutorialPaso = 0;
+            mostrarPasoTutorial();
+        }
+
+        function cerrarTutorial() {
+            tutorialActivo = false;
+            tutorialPaso = 0;
+            const overlay = document.getElementById('tutorialOverlay');
+            overlay.style.display = 'none';
+            overlay.innerHTML = '';
+            
+            // Quitar todos los highlights
+            tutorialPasos.forEach(paso => {
+                const el = document.getElementById(paso.elemento);
+                if (el) el.classList.remove('tutorial-highlight');
+            });
+        }
+
+        // ========== FUNCIONES DE GEMINI ==========
         async function callGemini(prompt, systemInstruction) {
             try {
                 const res = await fetch('/api/ai_query', { 
@@ -230,7 +555,7 @@ Juan Ignacio Lewczuk
             } catch (e) { return null; }
         }
 
-        // REVELACIÓN AUTOMÁTICA DE EMAILS ✨
+        // ========== FUNCIONES DE REVELACIÓN DE EMAILS ==========
         async function autoRevelarEmails() {
             if (revelandoEmails) return;
             revelandoEmails = true;
@@ -260,6 +585,7 @@ Juan Ignacio Lewczuk
             revelandoEmails = false;
         }
 
+        // ========== FUNCIONES DE BÚSQUEDA ==========
         async function buscar() {
             const zonaInput = document.getElementById('zona').value;
             if(!zonaInput) return;
@@ -285,6 +611,7 @@ Juan Ignacio Lewczuk
             }
         }
 
+        // ========== RENDERIZADO DE TABLA CON EMAILS CLICKEABLES ==========
         function renderTable() {
             const tbody = document.getElementById('leadsTable');
             tbody.innerHTML = "";
@@ -300,14 +627,19 @@ Juan Ignacio Lewczuk
                     </td>
                     <td class="px-6 py-4 font-bold text-slate-200">${l.nombre}</td>
                     <td class="px-6 py-4 text-center">
-                        <button onclick="abrirChat(${i})" class="text-emerald-500 font-mono hover:underline w-full">
+                        <button onclick="abrirChatWhatsApp(${i})" class="text-emerald-500 font-mono hover:underline w-full">
                             <i class="fa-brands fa-whatsapp"></i> ${l.telefono || '--'}
                         </button>
                     </td>
-                    <td class="px-6 py-4">
+                    <td class="px-6 py-4 email-cell" id="email-cell-${i}" onclick="toggleEmailSeleccion(${i}, event)">
                         <span id="email-text-${i}" class="${(l.email && l.email !== '-' && l.email !== '---') ? 'text-blue-300 font-bold' : ''}">
                             ${l.email || '---'}
                         </span>
+                        <span id="email-check-${i}" class="ml-2 text-emerald-500 text-[9px]" style="display: none;">✓ SELECCIONADO</span>
+                    </td>
+                    <td class="px-6 py-4 text-center" id="redes-${i}">
+                        ${l.instagram ? '<i class="fa-brands fa-instagram text-pink-500"></i>' : ''}
+                        ${l.facebook ? '<i class="fa-brands fa-facebook text-blue-500 ml-1"></i>' : ''}
                     </td>
                     <td class="px-6 py-4 text-center" id="status-${i}">
                         <span class="text-[9px] text-slate-700 uppercase font-black">Pendiente</span>
@@ -317,17 +649,163 @@ Juan Ignacio Lewczuk
             });
         }
 
-        // NUEVA FUNCIÓN: INICIAR CAMPAÑA COMPLETA (UN SOLO BOTÓN)
-        async function iniciarCampanaCompleta() {
+        // ========== SELECCIÓN DE EMAILS HACIENDO CLIC ==========
+        function toggleEmailSeleccion(index, event) {
+            event.stopPropagation();
+            const checkbox = document.querySelector(`.lead-check[data-index="${index}"]`);
+            if (checkbox) {
+                checkbox.checked = !checkbox.checked;
+                const emailCell = document.getElementById(`email-cell-${index}`);
+                const emailCheck = document.getElementById(`email-check-${index}`);
+                
+                if (checkbox.checked) {
+                    emailCell.classList.add('selected');
+                    if (emailCheck) emailCheck.style.display = 'inline';
+                } else {
+                    emailCell.classList.remove('selected');
+                    if (emailCheck) emailCheck.style.display = 'none';
+                }
+            }
+        }
+
+        function toggleAll() { 
+            const m = document.getElementById('selectAll'); 
+            document.querySelectorAll('.lead-check').forEach((c, i) => {
+                c.checked = m.checked;
+                const index = c.dataset.index;
+                const emailCell = document.getElementById(`email-cell-${index}`);
+                const emailCheck = document.getElementById(`email-check-${index}`);
+                if (emailCell && emailCheck) {
+                    if (m.checked) {
+                        emailCell.classList.add('selected');
+                        emailCheck.style.display = 'inline';
+                    } else {
+                        emailCell.classList.remove('selected');
+                        emailCheck.style.display = 'none';
+                    }
+                }
+            });
+        }
+
+        // ========== WHATSAPP SECUENCIAL - UNA VENTANA REUTILIZABLE ==========
+        function iniciarWhatsAppSecuencial() {
+            waCola = []; 
+            document.querySelectorAll('.lead-check:checked').forEach(c => waCola.push(parseInt(c.dataset.index))); 
+            if(waCola.length === 0) return alert("Selecciona al menos un comercio."); 
+            
+            // Intentar cerrar ventana anterior si existe
+            if (waWindow && !waWindow.closed) {
+                try { waWindow.close(); } catch(e) {}
+            }
+            waWindow = null;
+            waCursor = 0;
+            
+            document.getElementById('waModal').style.display = 'flex'; 
+            actualizarModalWASecuencial(); 
+        }
+
+        function actualizarModalWASecuencial() {
+            if(waCursor >= waCola.length) { 
+                document.getElementById('modalTitle').innerText = "¡Proceso completado!"; 
+                document.getElementById('modalProgress').innerText = `Se enviaron ${waCola.length} WhatsApps`; 
+                document.getElementById('btnSiguienteWA').style.display = 'none';
+                document.getElementById('modalInstructions').innerHTML = '✅ Todos los mensajes han sido procesados';
+                return; 
+            } 
+            const current = leads[waCola[waCursor]]; 
+            document.getElementById('modalTitle').innerText = current.nombre; 
+            document.getElementById('modalProgress').innerText = `${waCursor + 1} de ${waCola.length}`; 
+            document.querySelectorAll('tr').forEach(r => r.classList.remove('sending-row')); 
+            document.getElementById(`row-${waCola[waCursor]}`).classList.add('sending-row');
+            document.getElementById('btnSiguienteWA').style.display = 'block';
+            document.getElementById('modalInstructions').innerHTML = '1. Haz clic en "Abrir Chat"<br>2. Presiona ENVIAR en WhatsApp<br>3. Vuelve y continúa automáticamente';
+        }
+
+        function abrirSiguienteWASecuencial() {
+            if (waCursor >= waCola.length) {
+                cerrarModalWA();
+                return;
+            }
+            
+            const idx = waCola[waCursor];
+            const l = leads[idx];
+            if (!l.telefono) {
+                waCursor++;
+                actualizarModalWASecuencial();
+                return;
+            }
+            
+            const body = document.getElementById('waBody').value.replace('{nombre}', l.nombre);
+            const version = document.getElementById('waVersion').value;
+            
+            let url = '';
+            if (version === 'web') {
+                url = `https://web.whatsapp.com/send?phone=${l.telefono}&text=${encodeURIComponent(body)}`;
+            } else {
+                // Intentar abrir la app móvil
+                url = `whatsapp://send?phone=${l.telefono}&text=${encodeURIComponent(body)}`;
+            }
+            
+            // Reutilizar la misma ventana si es posible
+            if (waWindow && !waWindow.closed) {
+                try {
+                    waWindow.location.href = url;
+                    waWindow.focus();
+                } catch(e) {
+                    waWindow = window.open(url, 'whatsapp_soberania');
+                }
+            } else {
+                waWindow = window.open(url, 'whatsapp_soberania');
+            }
+            
+            // Marcar como enviado
+            document.getElementById(`status-${idx}`).innerHTML = `<span class="text-emerald-500 font-black uppercase">Chat Abierto</span>`;
+            
+            // Avanzar al siguiente después de un tiempo (para que el usuario presione enviar)
+            waCursor++;
+            
+            // Auto-avanzar después de 15 segundos
+            setTimeout(() => {
+                if (waCursor < waCola.length) {
+                    actualizarModalWASecuencial();
+                }
+            }, 500);
+            
+            actualizarModalWASecuencial();
+        }
+
+        function cerrarModalWA() { 
+            document.getElementById('waModal').style.display = 'none';
+            if (waWindow && !waWindow.closed) {
+                // No cerramos la ventana para que el usuario pueda ver el historial
+                // Pero la reutilizaremos en el próximo envío
+            }
+        }
+
+        function abrirChatWhatsApp(idx) {
+            const l = leads[idx];
+            if(!l.telefono) return;
+            const body = document.getElementById('waBody').value.replace('{nombre}', l.nombre);
+            window.open(`https://web.whatsapp.com/send?phone=${l.telefono}&text=${encodeURIComponent(body)}`, '_blank');
+        }
+
+        // ========== CAMPAÑA DE EMAILS - SOLO EMAILS ==========
+        async function iniciarCampanaEmails() {
             const user = document.getElementById('emailUser').value;
             const pass = document.getElementById('emailPass').value;
             const bodyContent = document.getElementById('emailBody').value;
-            const btn = document.getElementById('btnCampanaCompleta');
-            const modal = document.getElementById('campanaModal');
-            const content = document.getElementById('campanaResponseContent');
+            const btn = document.getElementById('btnCampanaEmails');
             
+            // Validaciones
             if(!user || !pass) {
-                alert("Configura Gmail y la Clave de Aplicación.");
+                alert("❌ Configura tu Gmail y la Clave de Aplicación.");
+                return;
+            }
+            
+            // Validar formato de clave (16 caracteres sin espacios)
+            const passSinEspacios = pass.replace(/\s+/g, '');
+            if (passSinEspacios.length < 16) {
+                alert("❌ La clave de aplicación debe tener 16 caracteres (sin espacios).");
                 return;
             }
             
@@ -343,24 +821,33 @@ Juan Ignacio Lewczuk
             }); 
             
             if(selected.length === 0) {
-                alert("Selecciona prospectos con email válido para enviar.");
+                alert("❌ Selecciona al menos un comercio con email válido (haz clic en la columna de email).");
                 return;
             }
 
+            // Mostrar modal de progreso
+            const modal = document.getElementById('emailProgressModal');
+            const content = document.getElementById('emailProgressContent');
+            const progressFill = document.getElementById('emailProgressFill');
+            const progressText = document.getElementById('emailProgressText');
+            
             modal.style.display = 'flex';
-            content.innerHTML = '🚀 INICIANDO CAMPAÑA COMPLETA...\n\n📧 Enviando emails...\n📱 Abriendo WhatsApps...\n\n';
+            content.innerHTML = '🚀 INICIANDO CAMPAÑA DE EMAILS...\n\n';
+            content.innerHTML += `📧 Destinatarios: ${selected.length}\n`;
+            content.innerHTML += `📎 Adjunto: producto.png\n\n`;
+            progressFill.style.width = '0%';
+            progressText.innerText = '0% completado';
             
             btn.disabled = true; 
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Ejecutando...';
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando emails...';
             
-            // 1. INICIAR EMAILS
             try {
                 const emailResponse = await fetch('/start_email_campaign', {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ 
                         leads: selected, 
                         email_user: user, 
-                        email_pass: pass, 
+                        email_pass: passSinEspacios, // Enviar sin espacios
                         subject: "Oferta Mayorista - Yerba Mate Soberanía", 
                         body: bodyContent, 
                         attach_image: true 
@@ -370,6 +857,8 @@ Juan Ignacio Lewczuk
                 const reader = emailResponse.body.getReader();
                 const decoder = new TextDecoder();
                 let emailsEnviados = 0;
+                let emailsExitosos = 0;
+                let emailsFallidos = 0;
                 
                 while (true) {
                     const { done, value } = await reader.read();
@@ -380,145 +869,55 @@ Juan Ignacio Lewczuk
                             try {
                                 const data = JSON.parse(line.replace('data: ', ''));
                                 if (data.status === 'finished') { 
-                                    content.innerHTML += '✅ CAMPAÑA DE EMAILS FINALIZADA\n\n';
+                                    content.innerHTML += '\n✅ CAMPAÑA DE EMAILS FINALIZADA\n';
+                                    content.innerHTML += `✅ Exitosos: ${emailsExitosos}\n`;
+                                    content.innerHTML += `❌ Fallidos: ${emailsFallidos}\n`;
+                                    progressFill.style.width = '100%';
+                                    progressText.innerText = '100% completado';
                                 }
                                 else if (data.index !== undefined) {
                                     emailsEnviados++;
+                                    if (data.success) emailsExitosos++; else emailsFallidos++;
+                                    
                                     const row = document.getElementById(`status-${data.index}`);
                                     if(row) {
                                         row.innerHTML = `<span class="text-[9px] ${data.success ? 'text-green-500' : 'text-red-500'} font-black uppercase">${data.msg}</span>`;
                                     }
-                                    if(emailsEnviados % 5 === 0) {
-                                        content.innerHTML += `📧 Progreso: ${emailsEnviados}/${selected.length} emails\n`;
-                                    }
+                                    
+                                    // Actualizar progreso
+                                    const porcentaje = Math.round((emailsEnviados / selected.length) * 100);
+                                    progressFill.style.width = `${porcentaje}%`;
+                                    progressText.innerText = `${porcentaje}% completado`;
+                                    
+                                    content.innerHTML += `${emailsEnviados}/${selected.length}: ${data.success ? '✅' : '❌'} ${leads[data.index]?.nombre || ''}\n`;
+                                    
+                                    // Auto-scroll
+                                    const contentDiv = document.getElementById('emailProgressContent');
+                                    contentDiv.scrollTop = contentDiv.scrollHeight;
                                 }
                             } catch(e) {}
                         }
                     });
                 }
             } catch(e) { 
-                content.innerHTML += '❌ Error en campaña de emails\n';
-            }
-
-            // 2. INICIAR WHATSAPP
-            content.innerHTML += '📱 INICIANDO WHATSAPP MASIVO...\n\n';
-            waCola = selected.map(s => s.original_index);
-            if(waCola.length > 0) {
-                waCursor = 0;
-                document.getElementById('waModal').style.display = 'flex';
-                actualizarModalWA();
-                content.innerHTML += `📱 ${waCola.length} chats de WhatsApp listos para abrir\n`;
-                content.innerHTML += '✅ CAMPAÑA COMPLETA FINALIZADA\n';
-            }
-
-            btn.disabled = false; 
-            btn.innerHTML = '<i class="fa-solid fa-rocket"></i> ENVIAR CAMPAÑA COMPLETA';
-        }
-
-        function cerrarCampanaModal() {
-            document.getElementById('campanaModal').style.display = 'none';
-        }
-
-        function iniciarEmailMasivo() { 
-            const user = document.getElementById('emailUser').value;
-            const pass = document.getElementById('emailPass').value;
-            const bodyContent = document.getElementById('emailBody').value;
-            const btn = document.getElementById('btnEmailMasivo');
-            
-            if(!user || !pass) return alert("Configura Gmail y la Clave de Aplicación.");
-            
-            const selected = []; 
-            document.querySelectorAll('.lead-check:checked').forEach(c => { 
-                const idx = parseInt(c.dataset.index); 
-                if(leads[idx].email && leads[idx].email !== '-' && leads[idx].email !== '---' && leads[idx].email !== '') {
-                    selected.push({
-                        ...leads[idx], 
-                        original_index: idx
-                    }); 
-                }
-            }); 
-            
-            if(selected.length === 0) return alert("Selecciona prospectos con email válido para enviar."); 
-            
-            btn.disabled = true; 
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando...';
-            
-            try {
-                const response = await fetch('/start_email_campaign', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ 
-                        leads: selected, 
-                        email_user: user, 
-                        email_pass: pass, 
-                        subject: "Oferta Mayorista - Yerba Mate Soberanía", 
-                        body: bodyContent, 
-                        attach_image: true 
-                    })
-                });
-
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    const lines = decoder.decode(value).split('\n');
-                    lines.forEach(line => {
-                        if (line.startsWith('data: ')) {
-                            try {
-                                const data = JSON.parse(line.replace('data: ', ''));
-                                if (data.status === 'finished') { 
-                                    btn.disabled = false; 
-                                    btn.innerHTML = '<i class="fa-solid fa-envelope"></i> Enviar Emails'; 
-                                    alert("Campaña finalizada."); 
-                                }
-                                else if (data.index !== undefined) {
-                                    const row = document.getElementById(`status-${data.index}`);
-                                    if(row) row.innerHTML = `<span class="text-[9px] ${data.success ? 'text-green-500' : 'text-red-500'} font-black uppercase">${data.msg}</span>`;
-                                }
-                            } catch(e) {}
-                        }
-                    });
-                }
-            } catch(e) { 
+                content.innerHTML += '\n❌ Error en campaña de emails\n';
+                content.innerHTML += e.toString();
+            } finally {
                 btn.disabled = false; 
-                btn.innerHTML = '<i class="fa-solid fa-envelope"></i> Enviar Emails';
+                btn.innerHTML = '<i class="fa-solid fa-envelope"></i> ENVIAR CAMPAÑA DE EMAILS';
             }
         }
 
-        function toggleAll() { const m = document.getElementById('selectAll'); document.querySelectorAll('.lead-check:checked').forEach(c => c.checked = m.checked); }
-        
-        function abrirChat(idx) { 
-            const l = leads[idx]; 
-            if(!l.telefono) return; 
-            const body = document.getElementById('waBody').value.replace('{nombre}', l.nombre); 
-            window.open(`https://web.whatsapp.com/send?phone=${l.telefono}&text=${encodeURIComponent(body)}`, "wa_session"); 
-            document.getElementById(`status-${idx}`).innerHTML = `<span class="text-emerald-500 font-black uppercase">Abierto</span>`; 
+        function cerrarEmailModal() {
+            document.getElementById('emailProgressModal').style.display = 'none';
         }
 
-        function iniciarWhatsAppMasivo() { 
-            waCola = []; 
-            document.querySelectorAll('.lead-check:checked').forEach(c => waCola.push(parseInt(c.dataset.index))); 
-            if(waCola.length === 0) return alert("Selecciona tiendas."); 
-            waCursor = 0; document.getElementById('waModal').style.display = 'flex'; actualizarModalWA(); 
+        function toggleGuiaEmail() { 
+            const guia = document.getElementById('guiaEmail'); 
+            guia.style.display = (guia.style.display === 'block') ? 'none' : 'block'; 
         }
 
-        function actualizarModalWA() { 
-            if(waCursor >= waCola.length) { 
-                document.getElementById('modalTitle').innerText = "¡Fin!"; 
-                document.getElementById('btnSiguiente').style.display = 'none'; 
-                return; 
-            } 
-            const current = leads[waCola[waCursor]]; 
-            document.getElementById('modalTitle').innerText = current.nombre; 
-            document.getElementById('modalProgress').innerText = `${waCursor + 1} de ${waCola.length}`; 
-            document.querySelectorAll('tr').forEach(r => r.classList.remove('sending-row')); 
-            document.getElementById(`row-${waCola[waCursor]}`).classList.add('sending-row'); 
-        }
-
-        function abrirSiguienteWA() { abrirChat(waCola[waCursor]); waCursor++; actualizarModalWA(); }
-        function cerrarModal() { document.getElementById('waModal').style.display = 'none'; }
-        function toggleGuiaEmail() { const guia = document.getElementById('guiaEmail'); guia.style.display = (guia.style.display === 'block') ? 'none' : 'block'; }
-
+        // ========== FUNCIONES DE IA ==========
         async function generarPitchIA() { 
             const btn = document.getElementById('btnPitchIA'); 
             const textarea = document.getElementById('waBody'); 
@@ -534,10 +933,36 @@ Juan Ignacio Lewczuk
             modal.style.display = 'flex'; content.innerText = "✨ IA Analizando zona..."; 
             const prompt = `Analiza estas dietéticas: ${leads.map(l => l.nombre).join(", ")}. Dame 3 consejos de venta para Yerba Mate Soberanía.`; 
             const res = await callGemini(prompt, "Estratega comercial."); 
-            content.innerText = res ? res.text : "Error."; 
+            content.innerText = res ? res.text : "Error al conectar con IA."; 
         }
 
-        function cerrarAIModal() { document.getElementById('aiModal').style.display = 'none'; }
+        function cerrarAIModal() { 
+            document.getElementById('aiModal').style.display = 'none'; 
+        }
+
+        // ========== INICIALIZACIÓN ==========
+        window.onload = () => {
+            // Verificar si la imagen existe
+            const img = document.getElementById('productImagePreview');
+            img.onerror = function() {
+                this.style.display = 'none';
+                const parent = this.parentElement;
+                if (parent) {
+                    const msg = document.createElement('p');
+                    msg.className = 'text-[9px] text-yellow-500';
+                    msg.innerText = '⚠️ Archivo producto.png no encontrado en la raíz del servidor';
+                    parent.appendChild(msg);
+                }
+            };
+            
+            // Iniciar tutorial automáticamente después de 1 segundo (solo la primera vez)
+            if (!sessionStorage.getItem('tutorialVisto')) {
+                setTimeout(() => {
+                    iniciarTutorial();
+                    sessionStorage.setItem('tutorialVisto', 'true');
+                }, 1000);
+            }
+        };
     </script>
 </body>
 </html>
