@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yerba Mate Soberanía - CRM PRO + IA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Firebase SDK para persistencia segura de datos -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Configuración proporcionada por el entorno
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'yerba-soberania-crm-pro';
+
+        // Función para guardar credenciales en la nube
+        window.saveCredentials = async () => {
+            const user = auth.currentUser;
+            if (!user) return alert("Error de conexión con la nube. Intenta recargar.");
+            const email = document.getElementById('emailUser').value;
+            const pass = document.getElementById('emailPass').value;
+            
+            try {
+                await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'credentials'), {
+                    email, pass, updatedAt: new Date()
+                });
+                alert("✅ Credenciales guardadas correctamente en tu sesión.");
+            } catch (e) { alert("Error al guardar: " + e.message); }
+        };
+
+        // Escuchador de estado de autenticación y carga de datos
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+                signInAnonymously(auth);
+            } else {
+                const docSnap = await getDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'credentials'));
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    document.getElementById('emailUser').value = data.email || "lewczukjuani@gmail.com";
+                    document.getElementById('emailPass').value = data.pass || "";
+                }
+            }
+        });
+    </script>
+
+    <style>
+        .sidebar { background: #0b1120; border-right: 1px solid #1e293b; }
+        .accent-emerald { color: #10b981; }
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+        input[type="checkbox"] { width: 18px; height: 18px; accent-color: #10b981; cursor: pointer; }
+        .sending-row { background-color: rgba(16, 185, 129, 0.15); border-left: 4px solid #10b981; }
+        .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); }
+        
+        .tutorial-card { 
+            pointer-events: auto; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(16px);
+            border: 1px solid rgba(16, 185, 129, 0.5); transform: translateY(20px); opacity: 0; 
+            transition: all 0.4s ease; 
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            margin: 1rem; width: calc(100% - 2rem); max-width: 350px;
+        }
+        .tutorial-active .tutorial-card { transform: translateY(0); opacity: 1; }
+        .highlight-element { position: relative; z-index: 110 !important; box-shadow: 0 0 0 9999px rgba(2, 6, 23, 0.6); border-radius: 1rem; outline: 3px solid #10b981; outline-offset: 4px; }
+        .app-container { height: 100vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .ai-button { background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%); transition: all 0.3s ease; }
+        .ai-button:hover { transform: scale(1.02); filter: brightness(1.1); }
+        .ai-loading { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body class="bg-[#020617] text-slate-200 font-sans overflow-hidden">
+
+    <div class="app-container flex flex-col lg:flex-row">
+        
+        <!-- SIDEBAR IZQUIERDA -->
+        <aside class="lg:w-[450px] sidebar p-6 space-y-6 flex flex-col shrink-0 lg:h-screen overflow-y-auto custom-scroll">
+            <div class="flex items-center gap-3">
+                <div class="bg-emerald-600 p-2.5 rounded-2xl shadow-lg shadow-emerald-600/20">
+                    <i class="fa-solid fa-leaf text-white text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-black tracking-tighter uppercase leading-none italic">Soberanía <span class="accent-emerald">B2B</span></h1>
+                    <span class="text-[9px] text-slate-500 font-bold tracking-widest uppercase">CRM Inteligente</span>
+                </div>
+            </div>
+
+            <!-- 1. BUSCADOR -->
+            <div id="step-1" class="space-y-4 pt-2 bg-slate-900/30 p-4 rounded-3xl border border-slate-800 transition-all duration-300">
+                <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2">1. Localización</h3>
+                <div class="flex gap-2">
+                    <input type="text" id="zona" placeholder="Ej: Morón, Buenos Aires" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-2xl text-sm outline-none focus:border-emerald-500 transition">
+                    <button onclick="buscar()" id="btnBuscar" class="bg-emerald-600 px-6 rounded-2xl hover:bg-emerald-500 transition shadow-lg">
+                        <i class="fa-solid fa-search"></i>
+                    </button>
+                </div>
+                <button onclick="analizarZonaIA()" id="btnAnalizarIA" class="w-full ai-button text-white font-bold py-2.5 px-4 rounded-xl text-[10px] uppercase flex items-center justify-center gap-2 hidden">
+                    <span>✨ Analizar Estrategia con IA</span>
+                </button>
+            </div>
+
+            <!-- 2. WHATSAPP CONFIG -->
+            <div id="step-2" class="space-y-4 pt-2 bg-slate-900/30 p-4 rounded-3xl border border-emerald-900/20 transition-all duration-300">
+                <div class="flex justify-between items-center border-b border-emerald-900/30 pb-2">
+                    <h3 class="text-[10px] font-black text-emerald-500 uppercase tracking-widest">2. WhatsApp</h3>
+                    <button onclick="generarPitchIA()" id="btnPitchIA" class="text-[9px] font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1">
+                        ✨ Sugerir Texto IA
+                    </button>
+                </div>
+                <div class="space-y-3">
+                    <label class="text-[9px] font-bold text-slate-500 uppercase px-1">Mensaje ({nombre})</label>
+                    <textarea id="waBody" rows="3" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-[10px] outline-none focus:border-emerald-500 resize-none leading-relaxed transition-all">Hola {nombre}, ¿cómo estás? Te escribo de Yerba Mate Soberanía para enviarte nuestra propuesta mayorista.</textarea>
+                    
+                    <button onclick="iniciarWhatsAppMasivo()" class="w-full bg-emerald-600 text-white font-black py-3 rounded-2xl hover:bg-emerald-500 transition flex items-center justify-center gap-2 text-[10px] uppercase shadow-xl">
+                        <i class="fa-solid fa-layer-group"></i> Iniciar Difusión WA
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3. EMAIL CONFIG -->
+            <div id="step-email" class="space-y-4 pt-2 bg-slate-900/30 p-4 rounded-3xl border border-blue-900/20">
+                <h3 class="text-[10px] font-black text-blue-500 uppercase tracking-widest border-b border-blue-900/30 pb-2">3. Propuesta Email</h3>
+                <div class="space-y-3">
+                    <input type="text" id="emailSubject" value="Propuesta Mayorista: Yerba Mate Soberanía para {nombre}" class="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-[10px] outline-none focus:border-blue-500">
+                    
+                    <label class="text-[9px] font-bold text-slate-500 uppercase px-1">Cuerpo del Email (Editable)</label>
+                    <textarea id="emailBody" rows="12" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-2xl text-[10px] outline-none focus:border-blue-500 resize-none custom-scroll leading-relaxed transition-all">Hola {nombre}, buen día:
+
+Mi nombre es Juan Ignacio Lewczuk y me comunico para ofrecerles Yerba Mate Soberanía para venta por mayor en dietéticas y comercios naturales.
+
+Trabajamos con una yerba de origen misionero, de excelente calidad, estacionada, con muy buena aceptación por parte de los consumidores que buscan un producto tradicional y confiable.
+
+Ofrecemos:
+
+✅ Precios mayoristas competitivos
+✅ Abastecimiento constante
+✅ Formatos ideales para dietéticas
+✅ Posibilidad de compras recurrentes
+
+Quedo a disposición para enviarles lista de precios, condiciones de venta o coordinar un primer pedido de prueba.
+
+Muchas gracias por su tiempo.
+
+Saludos cordiales,
+Juan Ignacio Lewczuk
+📱 WhatsApp: 11 3134-4552
+✉️ Email: lewczukjuani@gmail.com</textarea>
+                </div>
+            </div>
+
+            <!-- 4. CREDENCIALES -->
+            <div id="step-credentials" class="space-y-4 pt-4 border-t border-slate-800 mt-auto pb-10">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest">4. Credenciales</h3>
+                    <div class="flex gap-2">
+                        <button onclick="toggleHelp()" class="text-[9px] bg-slate-800 px-2 py-1 rounded text-slate-500 hover:text-white transition">Ayuda</button>
+                        <button onclick="saveCredentials()" class="text-[9px] bg-blue-600 px-3 py-1 rounded-full text-white font-bold hover:bg-blue-500 transition">GUARDAR DATOS</button>
+                    </div>
+                </div>
+                <div class="space-y-2">
+                    <input type="email" id="emailUser" value="lewczukjuani@gmail.com" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-[10px] outline-none">
+                    <input type="password" id="emailPass" placeholder="Clave de aplicación (16 letras)" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-[10px] outline-none border-dashed focus:border-blue-500">
+                    <input type="hidden" id="emailImage" value="https://github.com/Ssteier2016/automatizacion/blob/382c3af94885b408ce9a01cc504d176e41f0e5c8/producto.png">
+                    
+                    <button onclick="iniciarEmailMasivo()" id="btnEmailMasivo" class="w-full bg-white text-slate-950 font-black py-4 rounded-2xl hover:bg-emerald-400 transition flex items-center justify-center gap-2 text-xs uppercase shadow-2xl">
+                        <i class="fa-solid fa-paper-plane"></i> Lanzar Campaña Email
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- PANEL DE RESULTADOS -->
+        <main class="flex-1 p-4 lg:p-8 flex flex-col overflow-visible">
+            <div class="bg-[#0b1120] rounded-[2.5rem] border border-slate-800 shadow-2xl flex flex-col flex-1 min-h-[500px]">
+                <div class="px-8 py-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/40 sticky top-0 z-10 rounded-t-[2.5rem]">
+                    <div id="step-3" class="flex items-center gap-4 rounded-xl p-1 transition-all duration-300">
+                        <input type="checkbox" id="selectAll" onclick="toggleAll()">
+                        <h2 class="text-xs font-bold uppercase tracking-widest text-slate-400">Prospectos Detectados</h2>
+                    </div>
+                    <div id="stats" class="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-4 py-1.5 rounded-full border border-emerald-500/20 uppercase tracking-widest">Listo para buscar</div>
+                </div>
+
+                <div class="overflow-x-auto overflow-y-visible">
+                    <table class="w-full text-[11px] text-left min-w-[800px]">
+                        <thead class="bg-slate-900/80 text-[9px] uppercase text-slate-600 font-black sticky top-0 z-10">
+                            <tr>
+                                <th class="px-8 py-5 w-12 text-center text-emerald-500">Sel</th>
+                                <th class="px-8 py-5">Comercio / Dietética</th>
+                                <th class="px-8 py-5 text-center">WhatsApp (Individual)</th>
+                                <th class="px-8 py-5 text-center text-blue-400">Email Scraping</th>
+                                <th class="px-8 py-5 text-center">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leadsTable" class="divide-y divide-slate-800/50">
+                            <tr><td colspan="5" class="px-8 py-32 text-center text-slate-700 italic">
+                                <i class="fa-solid fa-radar text-5xl mb-4 block opacity-10"></i>
+                                Ingresa una zona para comenzar el rastreo profundo de Yerba Mate Soberanía...
+                            </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- CONSOLA DE LOGS -->
+            <div id="console" class="hidden mt-8 bg-[#0b1120] rounded-[2rem] border border-slate-800 overflow-hidden shadow-2xl font-mono">
+                <div class="bg-slate-900/80 px-6 py-4 flex justify-between items-center border-b border-white/5">
+                    <span class="text-[9px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2">
+                        <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span> Ejecución en Tiempo Real
+                    </span>
+                    <span id="progress" class="text-xs font-bold text-slate-500">0%</span>
+                </div>
+                <div id="logs" class="p-6 h-48 overflow-y-auto text-[10px] text-slate-400 custom-scroll space-y-1.5 bg-black/20 leading-relaxed"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL IA ✨ -->
+    <div id="aiModal" class="modal flex items-center justify-center p-6">
+        <div class="bg-slate-900 border border-slate-700 w-full max-w-lg p-8 rounded-[2.5rem] shadow-2xl space-y-6">
+            <div class="flex items-center gap-3 border-b border-slate-800 pb-3">
+                <i class="fa-solid fa-sparkles text-blue-500 text-2xl"></i>
+                <h2 class="text-lg font-black text-white uppercase italic">Análisis IA Soberanía ✨</h2>
+            </div>
+            <div id="aiResponseContent" class="text-xs text-slate-300 leading-relaxed overflow-y-auto max-h-[350px] custom-scroll whitespace-pre-wrap">
+                Analizando...
+            </div>
+            <button onclick="cerrarModal('aiModal')" class="w-full bg-slate-800 text-white font-bold py-3 rounded-2xl text-[10px] uppercase hover:bg-slate-700 transition">Cerrar</button>
+        </div>
+    </div>
+
+    <!-- MODAL AYUDA CLAVE -->
+    <div id="helpModal" class="modal flex items-center justify-center p-6">
+        <div class="bg-slate-900 border border-slate-700 w-full max-w-lg p-8 rounded-[2.5rem] shadow-2xl">
+            <h2 class="text-xl font-bold mb-4 text-emerald-400">Obtener tu Clave de Gmail</h2>
+            <ol class="text-sm space-y-4 text-slate-300 list-decimal pl-4 leading-relaxed font-medium">
+                <li>Entra a tu <strong>Cuenta de Google</strong> (Seguridad).</li>
+                <li>Activa la <strong>Verificación en dos pasos</strong>.</li>
+                <li>Busca <strong>"Contraseñas de aplicaciones"</strong> en el buscador de tu cuenta.</li>
+                <li>Crea una llamada "CRM Soberanía" y copia el código amarillo de <strong>16 letras</strong>.</li>
+            </ol>
+            <button onclick="cerrarModal('helpModal')" class="mt-8 w-full bg-white text-black font-bold py-3 rounded-2xl hover:bg-emerald-500 transition uppercase tracking-widest text-xs">Entendido</button>
+        </div>
+    </div>
+
+    <!-- MODAL WHATSAPP DIFUSIÓN -->
+    <div id="waModal" class="modal flex items-center justify-center p-6">
+        <div class="bg-slate-900 border border-slate-700 w-full max-w-sm p-8 rounded-[2.5rem] shadow-2xl text-center space-y-5">
+            <i class="fa-brands fa-whatsapp text-emerald-500 text-5xl"></i>
+            <div>
+                <h2 id="modalTitle" class="text-lg font-black text-white uppercase italic tracking-tighter">Preparando Envío</h2>
+                <p id="modalProgress" class="text-[10px] text-slate-400 mt-1 uppercase font-bold tracking-widest">Cola activa</p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="cerrarModal('waModal')" class="flex-1 bg-slate-800 text-slate-400 font-bold py-4 rounded-2xl text-[10px] uppercase hover:bg-slate-700 transition">Detener</button>
+                <button onclick="abrirSiguienteWA()" id="btnSiguiente" class="flex-1 bg-emerald-600 text-white font-black py-4 rounded-2xl text-[10px] uppercase shadow-lg hover:bg-emerald-500 transition">Abrir Chat</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TUTORIAL -->
+    <div id="tutorialModal" class="modal" style="display: none; background: transparent; pointer-events: none; justify-content: flex-end; align-items: flex-end;">
+        <div class="tutorial-card p-6 rounded-[2rem] space-y-4 pointer-events-auto">
+            <div class="flex items-center gap-3 border-b border-slate-800 pb-3">
+                <i class="fa-solid fa-wand-magic-sparkles text-emerald-500 text-xl"></i>
+                <h2 class="text-sm font-black text-white uppercase" id="tutorialTitle">Guía Rápida</h2>
+            </div>
+            <div id="tutorialContent">
+                <p class="text-[11px] text-slate-300 leading-relaxed font-medium" id="tutorialText">Bienvenido. Vamos a configurar el sistema de ventas paso a paso.</p>
+            </div>
+            <div class="flex items-center justify-between gap-4 pt-2">
+                <button onclick="cerrarTutorial()" class="text-slate-500 text-[9px] uppercase font-black hover:text-white transition">Omitir</button>
+                <button onclick="nextStep()" id="btnTutorial" class="bg-emerald-600 text-white font-black px-6 py-2.5 rounded-xl text-[10px] uppercase shadow-lg hover:bg-emerald-500 transition">Siguiente</button>
+            </div>
+            <div class="flex justify-center gap-1.5">
+                <div class="h-1 w-5 rounded-full bg-emerald-600" id="dot-0"></div>
+                <div class="h-1 w-5 rounded-full bg-slate-800" id="dot-1"></div>
+                <div class="h-1 w-5 rounded-full bg-slate-800" id="dot-2"></div>
+                <div class="h-1 w-5 rounded-full bg-slate-800" id="dot-3"></div>
+                <div class="h-1 w-5 rounded-full bg-slate-800" id="dot-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let leads = []; let waCola = []; let waCursor = 0; let step = 0;
+        let revelandoEmails = false;
+
+        window.onload = () => {
+            if (!sessionStorage.getItem('tutorialVisto')) {
+                const modal = document.getElementById('tutorialModal');
+                modal.style.display = 'flex';
+                setTimeout(() => modal.classList.add('tutorial-active'), 100);
+            }
+        };
+
+        const tutorialSteps = [
+            { text: "Busca una localidad o barrio para encontrar dietéticas en tiempo real.", highlight: "step-1" },
+            { text: "Configura tu mensaje de WhatsApp. Puedes usar la IA para sugerencias.", highlight: "step-2" },
+            { text: "Aquí aparecerán los resultados. Selecciona a quién quieres contactar.", highlight: "step-3" },
+            { text: "Revisa la propuesta de Yerba Soberanía. ¡Ya está lista para ser enviada!", highlight: "step-email" },
+            { text: "Guarda tu Gmail y Clave para que el sistema esté siempre listo.", highlight: "step-credentials" }
+        ];
+
+        function nextStep() {
+            if (tutorialSteps[step].highlight) document.getElementById(tutorialSteps[step].highlight).classList.remove('highlight-element');
+            step++;
+            if (step >= tutorialSteps.length) return cerrarTutorial();
+            const current = tutorialSteps[step];
+            document.getElementById('tutorialText').innerText = current.text;
+            for (let i = 0; i < 5; i++) document.getElementById(`dot-${i}`).className = `h-1 w-5 rounded-full ${i <= step ? 'bg-emerald-600' : 'bg-slate-800'}`;
+            if (current.highlight) {
+                const el = document.getElementById(current.highlight);
+                el.classList.add('highlight-element');
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        function cerrarTutorial() {
+            document.getElementById('tutorialModal').style.display = 'none';
+            sessionStorage.setItem('tutorialVisto', 'true');
+            if (tutorialSteps[step < 5 ? step : 4].highlight) document.getElementById(tutorialSteps[step < 5 ? step : 4].highlight).classList.remove('highlight-element');
+        }
+
+        async function callGemini(prompt, systemInstruction) {
+            try {
+                const res = await fetch('/api/ai_query', { 
+                    method: 'POST', headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({ prompt, systemInstruction }) 
+                });
+                if (res.status === 429) {
+                    const data = await res.json();
+                    return { error: 'LIMIT', wait: data.retry_after || 10 };
+                }
+                if (!res.ok) return null;
+                const data = await res.json();
+                return { text: data.text || null };
+            } catch (e) { return null; }
+        }
+
+        async function autoRevelarEmails() {
+            if (revelandoEmails) return;
+            revelandoEmails = true;
+            for (let i = 0; i < leads.length; i++) {
+                if (!leads[i].email || leads[i].email === '' || leads[i].email === '---') {
+                    const el = document.getElementById(`email-text-${i}`);
+                    if (el) el.innerHTML = '<span class="animate-pulse text-blue-500 text-[9px] uppercase font-bold italic">✨ Revelando con IA...</span>';
+                    
+                    const prompt = `Negocio: ${leads[i].nombre}. Ubicación: ${leads[i].direccion}. Responde SOLO el email de contacto corporativo. Si no sabes, responde "No encontrado".`;
+                    const res = await callGemini(prompt, "Experto en búsqueda de emails B2B.");
+                    
+                    if (res && res.error === 'LIMIT') {
+                        if (el) el.innerHTML = `<span class="text-[8px] text-yellow-500">Pausa IA (${res.wait}s)...</span>`;
+                        await new Promise(r => setTimeout(r, (res.wait + 1) * 1000));
+                        i--; continue;
+                    }
+                    leads[i].email = (res && res.text && res.text.includes('@')) ? res.text.trim().toLowerCase() : '---';
+                    renderTable();
+                    await new Promise(r => setTimeout(r, 2500));
+                }
+            }
+            revelandoEmails = false;
+        }
+
+        async function buscar() {
+            const zonaInput = document.getElementById('zona').value;
+            const btn = document.getElementById('btnBuscar');
+            if(!zonaInput) return alert("Escribe una zona.");
+            
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            document.getElementById('leadsTable').innerHTML = '<tr><td colspan="5" class="py-32 text-center text-emerald-500 font-black animate-pulse tracking-widest uppercase">Escaneando webs y cazando emails...</td></tr>';
+
+            try {
+                const res = await fetch('/search_places', { 
+                    method: 'POST', headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({zona: zonaInput, exhaustivo: true}) 
+                });
+                const data = await res.json();
+                leads = data.leads || []; 
+                renderTable();
+                document.getElementById('stats').innerText = `${leads.length} LEADS ENCONTRADOS`;
+                document.getElementById('btnAnalizarIA').classList.remove('hidden');
+                autoRevelarEmails();
+            } catch(e) { alert("Error de servidor."); }
+            finally { btn.innerHTML = '<i class="fa-solid fa-search"></i>'; }
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('leadsTable');
+            tbody.innerHTML = "";
+            leads.forEach((l, i) => {
+                const tr = document.createElement('tr');
+                tr.id = `row-${i}`;
+                tr.className = "hover:bg-slate-900/40 transition group";
+                const canSelect = (l.email && l.email !== '---') || l.telefono;
+                
+                tr.innerHTML = `
+                    <td class="px-8 py-5 text-center">
+                        <input type="checkbox" class="lead-check" data-index="${i}" ${canSelect ? 'checked' : ''}>
+                    </td>
+                    <td class="px-8 py-5">
+                        <div class="font-bold text-slate-200 group-hover:text-emerald-400 transition">${l.nombre}</div>
+                        <div class="text-[9px] text-slate-600 truncate max-w-[250px] mt-0.5">${l.direccion}</div>
+                    </td>
+                    <td class="px-8 py-5 text-center">
+                        ${l.telefono ? `
+                            <button onclick="abrirChat(${i})" class="bg-emerald-600/10 text-emerald-500 px-3 py-1.5 rounded-xl text-[10px] font-bold inline-flex items-center gap-2 border border-emerald-500/20 hover:bg-emerald-600 hover:text-white transition">
+                                <i class="fa-brands fa-whatsapp"></i> Chat
+                            </button>
+                        ` : `<span class="text-slate-800 text-[9px] font-bold">Línea fija</span>`}
+                    </td>
+                    <td class="px-8 py-5 text-center">
+                        <span id="email-text-${i}" class="text-[10px] font-mono ${l.email && l.email !== '---' ? 'text-blue-400 font-bold bg-blue-500/10 px-2 py-1 rounded-lg' : 'text-slate-700 italic'}">
+                            ${l.email || '---'}
+                        </span>
+                    </td>
+                    <td class="px-8 py-5 text-center" id="status-${i}">
+                        <span class="text-[9px] text-slate-700 uppercase font-black tracking-widest">Pendiente</span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function toggleAll() { 
+            const m = document.getElementById('selectAll'); 
+            document.querySelectorAll('.lead-check').forEach(c => c.checked = m.checked); 
+        }
+
+        function abrirChat(idx) { 
+            const l = leads[idx]; 
+            const body = document.getElementById('waBody').value.replace('{nombre}', l.nombre); 
+            window.open(`https://web.whatsapp.com/send?phone=${l.telefono}&text=${encodeURIComponent(body)}`, "wa_session"); 
+            document.getElementById(`status-${idx}`).innerHTML = `<span class="text-emerald-500 font-black uppercase text-[9px]">Abierto</span>`; 
+        }
+
+        function iniciarWhatsAppMasivo() { 
+            waCola = []; 
+            document.querySelectorAll('.lead-check:checked').forEach(c => waCola.push(parseInt(c.dataset.index))); 
+            if(waCola.length === 0) return alert("Selecciona tiendas con WhatsApp."); 
+            waCursor = 0; document.getElementById('waModal').style.display = 'flex'; actualizarModalWA(); 
+        }
+
+        function actualizarModalWA() { 
+            if(waCursor >= waCola.length) { 
+                document.getElementById('modalTitle').innerText = "¡Difusión Finalizada!"; 
+                document.getElementById('btnSiguiente').style.display = 'none'; 
+                return; 
+            } 
+            const current = leads[waCola[waCursor]]; 
+            document.getElementById('modalTitle').innerText = current.nombre; 
+            document.getElementById('modalProgress').innerText = `${waCursor + 1} de ${waCola.length} en cola`; 
+            document.querySelectorAll('tr').forEach(r => r.classList.remove('sending-row')); 
+            document.getElementById(`row-${waCola[waCursor]}`).classList.add('sending-row'); 
+        }
+
+        function abrirSiguienteWA() { abrirChat(waCola[waCursor]); waCursor++; actualizarModalWA(); }
+
+        async function iniciarEmailMasivo() {
+            const user = document.getElementById('emailUser').value;
+            const pass = document.getElementById('emailPass').value;
+            const btn = document.getElementById('btnEmailMasivo');
+            if(!pass) return alert("Ingresa la clave de 16 letras.");
+
+            const selected = [];
+            document.querySelectorAll('.lead-check:checked').forEach(c => {
+                const idx = parseInt(c.dataset.index);
+                if(leads[idx].email && leads[idx].email !== '---') {
+                    selected.push({...leads[idx], original_index: idx});
+                }
+            });
+
+            if(selected.length === 0) return alert("Selecciona prospectos con email detectado.");
+
+            btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Lanzando...';
+            document.getElementById('console').classList.remove('hidden');
+            document.getElementById('logs').innerHTML = "<div class='text-emerald-500 font-bold mb-4 animate-pulse uppercase'>> Conectando servidor Yerba Soberanía...</div>";
+
+            try {
+                const response = await fetch('/start_email_campaign', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ 
+                        leads: selected, email_user: user, email_pass: pass,
+                        subject: document.getElementById('emailSubject').value,
+                        body: document.getElementById('emailBody').value,
+                        image_url: document.getElementById('emailImage').value,
+                        attach_image: "true"
+                    })
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n\n');
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        const d = JSON.parse(line.replace('data: ', ''));
+                        if (d.status === 'start') total = d.total;
+                        if (d.progress) {
+                            const pct = Math.round((d.progress / selected.length) * 100);
+                            document.getElementById('progress').innerText = `${pct}%`;
+                            const logElem = document.createElement('div');
+                            logElem.className = d.success ? "text-green-400" : "text-red-400";
+                            logElem.innerHTML = `> [${d.progress}/${selected.length}] ${d.msg}`;
+                            document.getElementById('logs').prepend(logElem);
+                            const rowStatus = document.getElementById(`status-${d.lead_id || selected[d.progress-1].original_index}`);
+                            if(rowStatus) rowStatus.innerHTML = `<span class="text-[9px] ${d.success ? 'text-green-500' : 'text-red-500'} font-black uppercase">${d.success ? 'Enviado' : 'Falló'}</span>`;
+                        }
+                        if (d.status === 'finished') {
+                            btn.innerHTML = '<i class="fa-solid fa-check-double"></i> Campaña Finalizada';
+                            btn.classList.add('bg-emerald-600', 'text-white');
+                        }
+                    }
+                }
+            } catch(e) { alert("Error de conexión."); btn.disabled = false; }
+        }
+
+        async function analizarZonaIA() {
+            const modal = document.getElementById('aiModal');
+            const content = document.getElementById('aiResponseContent');
+            modal.style.display = 'flex'; content.innerText = "✨ IA Analizando competencia y zona comercial...";
+            const prompt = `Analiza estas tiendas: ${leads.map(l => l.nombre).join(", ")}. Dame una estrategia de 3 puntos para venderles Yerba Mate Soberanía hoy mismo.`;
+            const res = await callGemini(prompt, "Estratega comercial experto.");
+            content.innerText = res ? res.text : "Error al conectar con la IA.";
+        }
+
+        async function generarPitchIA() {
+            const btn = document.getElementById('btnPitchIA');
+            btn.innerText = "✨..."; btn.classList.add('ai-loading');
+            const prompt = "Genera un pitch de venta corto para WhatsApp vendiendo Yerba Mate Soberanía. Usa {nombre}.";
+            const res = await callGemini(prompt, "Vendedor estrella de yerba mate.");
+            if(res && res.text) document.getElementById('waBody').value = res.text;
+            btn.innerText = "✨ Sugerir Texto IA"; btn.classList.remove('ai-loading');
+        }
+
+        function toggleHelp() { document.getElementById('helpModal').style.display = 'flex'; }
+        function cerrarModal(id) { document.getElementById(id).style.display = 'none'; }
+    </script>
+</body>
+</html>
