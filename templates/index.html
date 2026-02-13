@@ -13,15 +13,37 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Configuración proporcionada por el entorno
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'yerba-soberania-crm-pro';
+        // Variables de entorno con chequeo de seguridad
+        let db, auth, appId;
+        
+        try {
+            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+            if (firebaseConfig) {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                appId = typeof __app_id !== 'undefined' ? __app_id : 'yerba-soberania-crm-pro';
 
-        // Función para guardar credenciales en la nube
+                onAuthStateChanged(auth, async (user) => {
+                    if (!user) {
+                        signInAnonymously(auth);
+                    } else {
+                        const docSnap = await getDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'credentials'));
+                        if (docSnap.exists()) {
+                            const data = docSnap.data();
+                            document.getElementById('emailUser').value = data.email || "lewczukjuani@gmail.com";
+                            document.getElementById('emailPass').value = data.pass || "";
+                        }
+                    }
+                });
+            }
+        } catch (err) {
+            console.warn("Firebase no inicializado: Trabajando en modo local sin persistencia.");
+        }
+
+        // Función para guardar credenciales expuesta globalmente
         window.saveCredentials = async () => {
+            if (!auth || !db) return alert("La persistencia en la nube no está configurada en este entorno.");
             const user = auth.currentUser;
             if (!user) return alert("Error de conexión con la nube. Intenta recargar.");
             const email = document.getElementById('emailUser').value;
@@ -31,23 +53,9 @@
                 await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'credentials'), {
                     email, pass, updatedAt: new Date()
                 });
-                alert("✅ Credenciales guardadas correctamente en tu sesión.");
+                alert("✅ Credenciales guardadas correctamente.");
             } catch (e) { alert("Error al guardar: " + e.message); }
         };
-
-        // Escuchador de estado de autenticación y carga de datos
-        onAuthStateChanged(auth, async (user) => {
-            if (!user) {
-                signInAnonymously(auth);
-            } else {
-                const docSnap = await getDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'credentials'));
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    document.getElementById('emailUser').value = data.email || "lewczukjuani@gmail.com";
-                    document.getElementById('emailPass').value = data.pass || "";
-                }
-            }
-        });
     </script>
 
     <style>
@@ -337,10 +345,17 @@ Juan Ignacio Lewczuk
                     const data = await res.json();
                     return { error: 'LIMIT', wait: data.retry_after || 10 };
                 }
-                if (!res.ok) return null;
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    console.error("Error de servidor IA:", errorText);
+                    return null;
+                }
                 const data = await res.json();
                 return { text: data.text || null };
-            } catch (e) { return null; }
+            } catch (e) { 
+                console.error("Fallo de red IA:", e);
+                return null; 
+            }
         }
 
         async function autoRevelarEmails() {
@@ -361,7 +376,7 @@ Juan Ignacio Lewczuk
                     }
                     leads[i].email = (res && res.text && res.text.includes('@')) ? res.text.trim().toLowerCase() : '---';
                     renderTable();
-                    await new Promise(r => setTimeout(r, 2500));
+                    await new Promise(r => setTimeout(r, 3000));
                 }
             }
             revelandoEmails = false;
@@ -392,6 +407,7 @@ Juan Ignacio Lewczuk
 
         function renderTable() {
             const tbody = document.getElementById('leadsTable');
+            if(!tbody) return;
             tbody.innerHTML = "";
             leads.forEach((l, i) => {
                 const tr = document.createElement('tr');
@@ -404,8 +420,8 @@ Juan Ignacio Lewczuk
                         <input type="checkbox" class="lead-check" data-index="${i}" ${canSelect ? 'checked' : ''}>
                     </td>
                     <td class="px-8 py-5">
-                        <div class="font-bold text-slate-200 group-hover:text-emerald-400 transition">${l.nombre}</div>
-                        <div class="text-[9px] text-slate-600 truncate max-w-[250px] mt-0.5">${l.direccion}</div>
+                        <div class="font-bold text-slate-200 group-hover:text-emerald-400 transition">${l.nombre || "Sin nombre"}</div>
+                        <div class="text-[9px] text-slate-600 truncate max-w-[250px] mt-0.5">${l.direccion || "Sin dirección"}</div>
                     </td>
                     <td class="px-8 py-5 text-center">
                         ${l.telefono ? `
@@ -434,16 +450,24 @@ Juan Ignacio Lewczuk
 
         function abrirChat(idx) { 
             const l = leads[idx]; 
-            const body = document.getElementById('waBody').value.replace('{nombre}', l.nombre); 
+            if (!l) return;
+            const body = document.getElementById('waBody').value.replace('{nombre}', l.nombre || "Comercio"); 
             window.open(`https://web.whatsapp.com/send?phone=${l.telefono}&text=${encodeURIComponent(body)}`, "wa_session"); 
-            document.getElementById(`status-${idx}`).innerHTML = `<span class="text-emerald-500 font-black uppercase text-[9px]">Abierto</span>`; 
+            const statusCol = document.getElementById(`status-${idx}`);
+            if(statusCol) statusCol.innerHTML = `<span class="text-emerald-500 font-black uppercase text-[9px]">Abierto</span>`; 
         }
 
         function iniciarWhatsAppMasivo() { 
             waCola = []; 
-            document.querySelectorAll('.lead-check:checked').forEach(c => waCola.push(parseInt(c.dataset.index))); 
+            document.querySelectorAll('.lead-check:checked').forEach(c => {
+                const idx = parseInt(c.dataset.index);
+                if(leads[idx] && leads[idx].telefono) waCola.push(idx);
+            });
             if(waCola.length === 0) return alert("Selecciona tiendas con WhatsApp."); 
-            waCursor = 0; document.getElementById('waModal').style.display = 'flex'; actualizarModalWA(); 
+            waCursor = 0; 
+            document.getElementById('waModal').style.display = 'flex'; 
+            document.getElementById('btnSiguiente').style.display = 'inline-block'; 
+            actualizarModalWA(); 
         }
 
         function actualizarModalWA() { 
@@ -453,13 +477,25 @@ Juan Ignacio Lewczuk
                 return; 
             } 
             const current = leads[waCola[waCursor]]; 
-            document.getElementById('modalTitle').innerText = current.nombre; 
+            if(!current) {
+                waCursor++;
+                actualizarModalWA();
+                return;
+            }
+            document.getElementById('modalTitle').innerText = current.nombre || "Siguiente"; 
             document.getElementById('modalProgress').innerText = `${waCursor + 1} de ${waCola.length} en cola`; 
             document.querySelectorAll('tr').forEach(r => r.classList.remove('sending-row')); 
-            document.getElementById(`row-${waCola[waCursor]}`).classList.add('sending-row'); 
+            const rowElem = document.getElementById(`row-${waCola[waCursor]}`);
+            if(rowElem) rowElem.classList.add('sending-row'); 
         }
 
-        function abrirSiguienteWA() { abrirChat(waCola[waCursor]); waCursor++; actualizarModalWA(); }
+        function abrirSiguienteWA() { 
+            if(waCursor < waCola.length) {
+                abrirChat(waCola[waCursor]); 
+                waCursor++; 
+                actualizarModalWA(); 
+            }
+        }
 
         async function iniciarEmailMasivo() {
             const user = document.getElementById('emailUser').value;
@@ -470,7 +506,7 @@ Juan Ignacio Lewczuk
             const selected = [];
             document.querySelectorAll('.lead-check:checked').forEach(c => {
                 const idx = parseInt(c.dataset.index);
-                if(leads[idx].email && leads[idx].email !== '---') {
+                if(leads[idx] && leads[idx].email && leads[idx].email !== '---') {
                     selected.push({...leads[idx], original_index: idx});
                 }
             });
@@ -502,22 +538,25 @@ Juan Ignacio Lewczuk
                     const lines = chunk.split('\n\n');
                     for (const line of lines) {
                         if (!line.startsWith('data: ')) continue;
-                        const d = JSON.parse(line.replace('data: ', ''));
-                        if (d.status === 'start') total = d.total;
-                        if (d.progress) {
-                            const pct = Math.round((d.progress / selected.length) * 100);
-                            document.getElementById('progress').innerText = `${pct}%`;
-                            const logElem = document.createElement('div');
-                            logElem.className = d.success ? "text-green-400" : "text-red-400";
-                            logElem.innerHTML = `> [${d.progress}/${selected.length}] ${d.msg}`;
-                            document.getElementById('logs').prepend(logElem);
-                            const rowStatus = document.getElementById(`status-${d.lead_id || selected[d.progress-1].original_index}`);
-                            if(rowStatus) rowStatus.innerHTML = `<span class="text-[9px] ${d.success ? 'text-green-500' : 'text-red-500'} font-black uppercase">${d.success ? 'Enviado' : 'Falló'}</span>`;
-                        }
-                        if (d.status === 'finished') {
-                            btn.innerHTML = '<i class="fa-solid fa-check-double"></i> Campaña Finalizada';
-                            btn.classList.add('bg-emerald-600', 'text-white');
-                        }
+                        try {
+                            const d = JSON.parse(line.replace('data: ', ''));
+                            if (d.progress) {
+                                const pct = Math.round((d.progress / selected.length) * 100);
+                                document.getElementById('progress').innerText = `${pct}%`;
+                                const logElem = document.createElement('div');
+                                logElem.className = d.success ? "text-green-400" : "text-red-400";
+                                logElem.innerHTML = `> [${d.progress}/${selected.length}] ${d.msg}`;
+                                document.getElementById('logs').prepend(logElem);
+                                
+                                const targetIdx = d.lead_id !== undefined ? leads.findIndex(l => l.id === d.lead_id) : selected[d.progress-1].original_index;
+                                const rowStatus = document.getElementById(`status-${targetIdx}`);
+                                if(rowStatus) rowStatus.innerHTML = `<span class="text-[9px] ${d.success ? 'text-green-500' : 'text-red-500'} font-black uppercase">${d.success ? 'Enviado' : 'Falló'}</span>`;
+                            }
+                            if (d.status === 'finished') {
+                                btn.innerHTML = '<i class="fa-solid fa-check-double"></i> Campaña Finalizada';
+                                btn.classList.add('bg-emerald-600', 'text-white');
+                            }
+                        } catch(e) {}
                     }
                 }
             } catch(e) { alert("Error de conexión."); btn.disabled = false; }
@@ -529,7 +568,7 @@ Juan Ignacio Lewczuk
             modal.style.display = 'flex'; content.innerText = "✨ IA Analizando competencia y zona comercial...";
             const prompt = `Analiza estas tiendas: ${leads.map(l => l.nombre).join(", ")}. Dame una estrategia de 3 puntos para venderles Yerba Mate Soberanía hoy mismo.`;
             const res = await callGemini(prompt, "Estratega comercial experto.");
-            content.innerText = res ? res.text : "Error al conectar con la IA.";
+            content.innerText = res ? res.text : "Error al conectar con la IA. Verifica tu API KEY en el servidor.";
         }
 
         async function generarPitchIA() {
