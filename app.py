@@ -1,419 +1,213 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yerba Mate Soberanía - CRM PRO + IA</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        .sidebar { background: #0b1120; border-right: 1px solid #1e293b; }
-        .accent-emerald { color: #10b981; }
-        .custom-scroll::-webkit-scrollbar { width: 4px; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
-        input[type="checkbox"] { width: 18px; height: 18px; accent-color: #10b981; cursor: pointer; }
-        .sending-row { background-color: rgba(16, 185, 129, 0.15); border-left: 4px solid #10b981; }
-        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); }
+import os
+import smtplib
+import time
+import random
+import re
+import requests
+import googlemaps
+import json
+from bs4 import BeautifulSoup
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
+from flask import Flask, request, jsonify, Response, stream_with_context, send_file, render_template
+from urllib.parse import urljoin
+from flask_cors import CORS
+
+app = Flask(__name__)
+# Habilitar CORS para permitir que el navegador se comunique con el servidor en Render
+CORS(app)
+
+app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+# API KEYS - Se obtienen de las variables de entorno configuradas en Render
+GOOGLE_MAPS_KEY = os.environ.get('GOOGLE_MAPS_KEY', 'AIzaSyBGJ8B2z9p52LM-x9vEwxO9pmx8V9w7Ws4')
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+
+try:
+    gmaps = googlemaps.Client(key=GOOGLE_MAPS_KEY)
+except Exception as e:
+    print(f"Error inicializando Google Maps: {e}")
+    gmaps = None
+
+@app.route('/producto.png')
+def get_producto_image():
+    """Sirve la imagen del producto si existe en la raíz del proyecto."""
+    if os.path.exists('producto.png'):
+        return send_file('producto.png', mimetype='image/png')
+    return "Archivo producto.png no encontrado en la raíz", 404
+
+def validar_email(email):
+    """Valida el formato de un correo electrónico mediante expresiones regulares."""
+    patron = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return bool(re.match(patron, email))
+
+def scraping_profundo_contacto(url_base, exhaustivo=False):
+    """Busca correos electrónicos y redes sociales analizando la web."""
+    info = {"email": "", "facebook": "", "instagram": ""}
+    if not url_base or not url_base.startswith('http'):
+        return info
+    
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'}
+    try:
+        res = requests.get(url_base, timeout=6, headers=headers)
+        if res.status_code != 200: return info
         
-        /* Estilos Tutorial */
-        .tutorial-card { 
-            pointer-events: auto; background: #0f172a; border: 2px solid #10b981; transform: translateY(20px); opacity: 0; 
-            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 1);
-            margin: 1.5rem; width: calc(100% - 3rem); max-width: 350px;
-            z-index: 2000; position: fixed; bottom: 20px; right: 20px;
-        }
-        .tutorial-active .tutorial-card { transform: translateY(0); opacity: 1; }
-        .highlight-element { position: relative; z-index: 1100 !important; box-shadow: 0 0 0 9999px rgba(2, 6, 23, 0.9); border-radius: 1rem; outline: 4px solid #10b981; outline-offset: 6px; background: #0b1120 !important; }
+        texto_pagina = res.text
+        found_emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', texto_pagina)
+        soup = BeautifulSoup(texto_pagina, 'html.parser')
         
-        .app-container { height: 100vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-        .app-password-guide { display: none; background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 15px; margin-top: 8px; font-size: 11px; color: #94a3b8; }
-        .ai-loading { animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
-    </style>
-
-    <!-- Firebase SDK -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        let db, auth, appId;
-        window.initFirebase = async () => {
-            try {
-                if (typeof __firebase_config === 'undefined') return;
-                const config = JSON.parse(__firebase_config);
-                const app = initializeApp(config);
-                auth = getAuth(app);
-                db = getFirestore(app);
-                appId = typeof __app_id !== 'undefined' ? __app_id : 'yerba-crm-soberania';
-                onAuthStateChanged(auth, async (user) => {
-                    if (!user) await signInAnonymously(auth);
-                    else {
-                        const snap = await getDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'creds'));
-                        if (snap.exists()) {
-                            const d = snap.data();
-                            document.getElementById('emailUser').value = d.email || '';
-                            document.getElementById('emailPass').value = d.pass || '';
-                        }
-                    }
-                });
-            } catch (err) { console.error(err); }
-        };
-        window.saveCredentials = async () => {
-            const email = document.getElementById('emailUser').value;
-            const pass = document.getElementById('emailPass').value.replace(/\s/g, ''); // Quita espacios
-            if(!email || pass.length !== 16) return alert("Ingresa un email válido y la clave de 16 letras.");
-            try {
-                await setDoc(doc(db, 'artifacts', appId, 'users', auth.currentUser.uid, 'settings', 'creds'), { email, pass });
-                alert("✅ Credenciales guardadas en la nube.");
-            } catch (e) { alert(e.message); }
-        };
-        window.initFirebase();
-    </script>
-</head>
-<body class="bg-[#020617] text-slate-200 font-sans overflow-hidden">
-
-    <div class="app-container flex flex-col lg:flex-row">
-        <!-- SIDEBAR IZQUIERDA -->
-        <aside class="lg:w-[450px] sidebar p-6 space-y-6 flex flex-col shrink-0 lg:h-screen overflow-y-auto custom-scroll">
-            <div class="flex items-center gap-3">
-                <div class="bg-emerald-600 p-2 rounded-xl shadow-lg shadow-emerald-500/20"><i class="fa-solid fa-leaf text-white text-xl"></i></div>
-                <h1 class="text-xl font-black tracking-tighter uppercase italic leading-none">Soberanía <span class="accent-emerald">PRO</span></h1>
-            </div>
-
-            <!-- 1. BUSQUEDA -->
-            <div id="step-search" class="space-y-4 pt-2 bg-slate-900/30 p-4 rounded-3xl border border-slate-800 transition-all">
-                <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2">1. Localización</h3>
-                <div class="flex gap-2">
-                    <input type="text" id="zona" placeholder="Ej: Morón, Buenos Aires" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-2xl text-sm outline-none focus:border-emerald-500">
-                    <button onclick="buscar()" id="btnBuscar" class="bg-emerald-600 px-6 rounded-2xl hover:bg-emerald-500 transition shadow-lg"><i class="fa-solid fa-search"></i></button>
-                </div>
-            </div>
-
-            <!-- 2. WHATSAPP -->
-            <div id="step-whatsapp" class="space-y-4 pt-2 bg-slate-900/30 p-4 rounded-3xl border border-emerald-900/20 transition-all">
-                <div class="flex justify-between items-center border-b border-emerald-900/30 pb-2">
-                    <h3 class="text-[10px] font-black text-emerald-500 uppercase tracking-widest">2. WhatsApp</h3>
-                    <button onclick="generarPitchIA()" id="btnPitchIA" class="text-[9px] font-bold text-blue-400 hover:text-blue-300">✨ Sugerir Texto</button>
-                </div>
-                <textarea id="waBody" rows="3" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-[10px] outline-none focus:border-emerald-500 resize-none transition-all">Hola {nombre}, ¿cómo estás? Te escribo de Yerba Mate Soberanía para enviarte nuestra lista de precios mayorista.</textarea>
-                <button onclick="iniciarWhatsAppMasivo()" class="w-full bg-emerald-600 text-white font-black py-3 rounded-2xl text-[10px] uppercase shadow-xl">DIFUSIÓN WHATSAPP</button>
-            </div>
-
-            <!-- 3. EMAIL -->
-            <div id="step-email" class="space-y-4 pt-2 bg-slate-900/30 p-4 rounded-3xl border border-blue-900/20 transition-all">
-                <h3 class="text-[10px] font-black text-blue-500 uppercase tracking-widest border-b border-blue-900/30 pb-2">3. Propuesta Email</h3>
-                <textarea id="emailBody" rows="12" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-[10px] outline-none focus:border-blue-500 resize-none leading-relaxed">Hola, buen día:
-
-Mi nombre es Juan Ignacio Lewczuk y me comunico con {nombre} ubicado en {direccion} para ofrecerles Yerba Mate Soberanía para venta por mayor en dietéticas y comercios naturales.
-
-Trabajamos con una yerba de origen misionero, de excelente calidad, estacionada, con muy buena aceptación por parte de los consumidores que buscan un producto tradicional y confiable.
-
-Ofrecemos:
-✅ Precios mayoristas competitivos
-✅ Abastecimiento constante
-✅ Formatos ideales para dietéticas
-✅ Posibilidad de compras recurrentes
-
-Quedo a disposición para enviarles lista de precios, condiciones de venta o coordinar un primer pedido de prueba.
-
-Muchas gracias por su tiempo.
-
-Saludos cordiales,
-Juan Ignacio Lewczuk
-📱 WhatsApp: 11 3134-4552
-✉️ Email: lewczukjuani@gmail.com</textarea>
-                
-                <div id="step-credentials" class="space-y-2 border-t border-slate-800 pt-4">
-                    <div class="flex justify-between items-center px-1">
-                        <label class="text-[9px] font-bold text-slate-500 uppercase italic">Seguridad Gmail</label>
-                        <button onclick="toggleGuia()" class="text-blue-500 text-[9px] font-bold hover:underline italic">AYUDA CLAVE</button>
-                    </div>
-                    <input type="email" id="emailUser" placeholder="Tu Gmail" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-[10px] outline-none">
-                    <input type="password" id="emailPass" placeholder="Clave de 16 letras" class="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-[10px] outline-none">
-                    
-                    <div id="guiaEmail" class="app-password-guide">
-                        <p class="font-bold text-blue-400">Cómo obtener la clave:</p>
-                        <ol class="list-decimal list-inside space-y-1 my-2">
-                            <li>Ve a <a href="https://myaccount.google.com/apppasswords" target="_blank" class="text-emerald-400 underline font-bold">Seguridad de Google</a></li>
-                            <li>Dale un nombre (ej: "CRM").</li>
-                            <li>Copia el código amarillo de 16 letras.</li>
-                            <li>Pégalo arriba sin espacios.</li>
-                        </ol>
-                        <button onclick="toggleGuia()" class="w-full bg-slate-800 py-1 rounded mt-2 text-[8px] font-black uppercase">Entendido</button>
-                    </div>
-
-                    <button onclick="saveCredentials()" class="w-full bg-slate-800 text-white font-bold py-2 rounded-xl text-[9px] uppercase italic">Guardar Credenciales</button>
-                    <button onclick="iniciarEmailMasivo()" id="btnEmailMasivo" class="w-full bg-blue-600 text-white font-black py-4 rounded-2xl text-[10px] uppercase shadow-2xl hover:bg-blue-500 mt-2">ENVIAR EMAILS MASIVOS</button>
-                    <input type="hidden" id="emailImage" value="https://github.com/Ssteier2016/automatizacion/blob/382c3af94885b408ce9a01cc504d176e41f0e5c8/producto.png">
-                </div>
-            </div>
-        </aside>
-
-        <!-- PANEL DE RESULTADOS -->
-        <main class="flex-1 p-4 lg:p-8 flex flex-col overflow-visible">
-            <div id="step-table" class="bg-[#0b1120] rounded-[2.5rem] border border-slate-800 shadow-2xl flex flex-col flex-1 min-h-[500px]">
-                <div class="px-8 py-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/40 sticky top-0 z-10 rounded-t-[2.5rem]">
-                    <div class="flex items-center gap-4"><input type="checkbox" id="selectAll" onclick="toggleAll()"><h2 class="text-xs font-bold uppercase tracking-widest text-slate-400 italic">Dietéticas Rastreadas</h2></div>
-                    <div id="stats" class="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Listo</div>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-[11px] text-left min-w-[800px]">
-                        <thead class="bg-slate-900/80 text-[9px] uppercase text-slate-600 font-black sticky top-0 z-10">
-                            <tr><th class="px-8 py-5 w-12 text-center">Sel</th><th>Comercio / Ubicación</th><th class="text-center">WhatsApp</th><th class="text-center">Email</th><th class="text-center">Estado</th></tr>
-                        </thead>
-                        <tbody id="leadsTable" class="divide-y divide-slate-800/50">
-                            <tr><td colspan="5" class="py-32 text-center text-slate-700 italic font-medium tracking-widest">UTILIZA EL BUSCADOR PARA COMENZAR</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- MONITOR DE CAMPAÑA -->
-            <div id="monitorCampaña" class="hidden mt-8 bg-[#0b1120] rounded-[2rem] border border-slate-800 overflow-hidden font-mono shadow-2xl">
-                <div class="bg-slate-900/80 px-6 py-4 flex justify-between border-b border-white/5">
-                    <span class="text-[9px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2">
-                        <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span> Monitor de Envío
-                    </span>
-                    <span id="progress" class="text-xs font-bold text-slate-500">0%</span>
-                </div>
-                <div id="logs" class="p-6 h-40 overflow-y-auto text-[10px] text-slate-400 space-y-1 bg-black/20 custom-scroll"></div>
-            </div>
-        </main>
-    </div>
-
-    <!-- MODAL WA -->
-    <div id="waModal" class="modal flex items-center justify-center p-6">
-        <div class="bg-slate-900 border border-slate-700 w-full max-w-sm p-10 rounded-[3rem] shadow-2xl text-center space-y-5">
-            <i class="fa-brands fa-whatsapp text-emerald-500 text-6xl"></i>
-            <h2 id="modalTitle" class="text-xl font-black text-white uppercase italic text-emerald-500">Abriendo Chat</h2>
-            <p id="modalProgress" class="text-[10px] text-slate-400 mt-1 uppercase font-bold tracking-widest">Secuencia Activa</p>
-            <div class="flex gap-2"><button onclick="cerrarModal('waModal')" class="flex-1 bg-slate-800 text-slate-400 font-bold py-4 rounded-2xl text-[10px] uppercase">Detener</button><button onclick="abrirSiguienteWA()" id="btnSiguiente" class="flex-1 bg-emerald-600 text-white font-black py-4 rounded-2xl text-[10px] uppercase shadow-lg">Siguiente</button></div>
-        </div>
-    </div>
-
-    <!-- TUTORIAL EXTENSO -->
-    <div id="tutorialModal" class="modal" style="display: none; background: transparent; pointer-events: none;">
-        <div class="tutorial-card p-6 rounded-[2.5rem] space-y-3 pointer-events-auto shadow-emerald-500/20">
-            <div class="flex items-center gap-2 border-b border-slate-800 pb-2">
-                <i class="fa-solid fa-wand-magic-sparkles text-emerald-500 text-xs"></i>
-                <h2 class="text-[10px] font-black text-white uppercase tracking-widest">Guía Yerba Soberanía</h2>
-            </div>
-            <p class="text-[11px] text-slate-300 leading-tight font-medium" id="tutorialText">Bienvenido. Iniciemos la configuración.</p>
-            <div class="flex items-center justify-between gap-3 pt-1">
-                <button onclick="cerrarTutorial()" class="text-slate-500 text-[9px] uppercase font-black hover:text-white transition">Omitir</button>
-                <button onclick="nextStep()" id="btnTutorial" class="bg-emerald-600 text-white font-black px-4 py-2 rounded-lg text-[9px] uppercase shadow-lg">Siguiente</button>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        let leads = []; let waCola = []; let waCursor = 0; let curStep = 0;
-        let revelandoEmails = false;
-
-        const steps = [
-            { text: "1. LOCALIZACIÓN: Ingresa una ciudad o barrio y busca. El sistema extraerá dietéticas de Google Maps automáticamente.", highlight: "step-search" },
-            { text: "2. WHATSAPP: Configura tu saludo. Usaremos el nombre de la tienda para que el mensaje sea cercano.", highlight: "step-whatsapp" },
-            { text: "3. PROPUESTA: Este es tu mensaje oficial. Incluye {nombre} y {direccion} para que se completen solos.", highlight: "step-email" },
-            { text: "4. SEGURIDAD: Ingresa tu email y la clave de aplicación de 16 letras de Google. Pulsa GUARDAR para no perderlos.", highlight: "step-credentials" },
-            { text: "5. RESULTADOS: Aquí verás todo. Selecciona prospectos y pulsa LANZAR CAMPAÑA para vender masivamente.", highlight: "step-table" }
-        ];
-
-        window.onload = () => { 
-            if (!sessionStorage.getItem('tutorialVisto')) { 
-                const mod = document.getElementById('tutorialModal');
-                mod.style.display = 'flex'; 
-                setTimeout(() => mod.classList.add('tutorial-active'), 500);
-            } 
-        };
-
-        async function callGemini(prompt, systemInstruction) {
-            try {
-                const res = await fetch('/api/ai_query', { 
-                    method: 'POST', headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify({ prompt, systemInstruction }) 
-                });
-                if (res.status === 429) {
-                    const d = await res.json();
-                    return { error: 'LIMIT', wait: d.retry_after || 20 };
-                }
-                const data = await res.json();
-                return { text: data.text || null };
-            } catch (e) { return null; }
-        }
-
-        async function autoRevelarEmails() {
-            if (revelandoEmails) return;
-            revelandoEmails = true;
-            for (let i = 0; i < leads.length; i++) {
-                if (!leads[i].email || leads[i].email === '---' || leads[i].email === '') {
-                    const textSpan = document.getElementById(`email-text-${i}`);
-                    if (textSpan) textSpan.innerHTML = '<span class="animate-pulse text-blue-500 text-[9px] font-black italic uppercase">✨ IA Buscando...</span>';
-                    
-                    const res = await callGemini(`Negocio: ${leads[i].nombre}. Ubicación: ${leads[i].direccion}. Responde SOLO el email de contacto. Si no sabes, responde "---".`, "Buscador B2B.");
-                    
-                    if (res && res.error === 'LIMIT') {
-                        if (textSpan) textSpan.innerHTML = `<span class="text-[8px] text-yellow-600 italic">Pausa IA (${res.wait}s)...</span>`;
-                        await new Promise(r => setTimeout(r, (res.wait + 1) * 1000));
-                        i--; continue;
-                    }
-                    leads[i].email = (res && res.text && res.text.includes('@')) ? res.text.trim().toLowerCase() : '---';
-                    renderTable();
-                    await new Promise(r => setTimeout(r, 5000)); // Ralentización para evitar 429
-                }
-            }
-            revelandoEmails = false;
-        }
-
-        async function buscar() {
-            const zona = document.getElementById('zona').value;
-            if(!zona) return;
-            document.getElementById('btnBuscar').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-            try {
-                const res = await fetch('/search_places', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({zona, exhaustivo: true}) });
-                const data = await res.json();
-                leads = data.leads || []; 
-                renderTable();
-                document.getElementById('stats').innerText = `${leads.length} HALLADOS`;
-                autoRevelarEmails();
-            } catch(e) { alert("Error"); } 
-            finally { document.getElementById('btnBuscar').innerHTML = '<i class="fa-solid fa-search"></i>'; }
-        }
-
-        function renderTable() {
-            const tbody = document.getElementById('leadsTable');
-            if(!tbody) return;
-            tbody.innerHTML = "";
-            leads.forEach((l, i) => {
-                const tr = document.createElement('tr');
-                tr.id = `row-${i}`;
-                tr.className = "hover:bg-slate-900/40 transition group";
-                const isCheckable = (l.email && l.email !== '---') || l.telefono;
-                tr.innerHTML = `
-                    <td class="px-8 py-5 text-center"><input type="checkbox" class="lead-check" data-index="${i}" ${isCheckable ? 'checked' : ''}></td>
-                    <td class="px-8 py-5"><div class="font-bold text-slate-200 group-hover:text-emerald-400 transition">${l.nombre}</div><div class="text-[9px] text-slate-600 truncate max-w-[250px] italic">${l.direccion}</div></td>
-                    <td class="px-8 py-5 text-center"><button onclick="abrirChat(${i})" class="text-emerald-500 font-mono hover:underline w-full"><i class="fa-brands fa-whatsapp text-xs"></i> ${l.telefono || '--'}</button></td>
-                    <td class="px-8 py-5 text-center"><span id="email-text-${i}" class="${l.email && l.email !== '---' ? 'text-blue-400 font-bold bg-blue-500/10 px-2 py-1 rounded shadow-sm border border-blue-500/20' : 'text-slate-700'}">${l.email || '---'}</span></td>
-                    <td class="px-8 py-5 text-center" id="status-${i}"><span class="text-[9px] text-slate-700 uppercase font-black">Pendiente</span></td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-
-        async function iniciarEmailMasivo() { 
-            const user = document.getElementById('emailUser').value;
-            const pass = document.getElementById('emailPass').value.replace(/\s/g, '');
-            const btn = document.getElementById('btnEmailMasivo');
-            if(!pass || !user) return alert("Completa tus credenciales de Gmail.");
+        links_to_check = []
+        for a in soup.find_all('a', href=True):
+            href = a['href'].lower()
+            h_full = urljoin(url_base, a['href'])
             
-            const selected = []; 
-            document.querySelectorAll('.lead-check:checked').forEach(c => { 
-                const idx = parseInt(c.dataset.index); 
-                if(leads[idx] && leads[idx].email && leads[idx].email !== '---') {
-                    selected.push({...leads[idx], original_index: idx}); 
-                }
-            }); 
+            if 'facebook.com' in href and not info["facebook"]:
+                info["facebook"] = a['href']
+            if 'instagram.com' in href and not info["instagram"]:
+                info["instagram"] = a['href']
             
-            if(selected.length === 0) return alert("No hay emails válidos seleccionados."); 
-            btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Lanzando...';
-            document.getElementById('monitorCampaña').classList.remove('hidden');
-            document.getElementById('logs').innerHTML = "";
+            if exhaustivo and any(term in href for term in ['contacto', 'contact', 'nosotros', 'about', 'info']):
+                links_to_check.append(h_full)
 
-            try {
-                const response = await fetch('/start_email_campaign', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ 
-                        leads: selected, email_user: user, email_pass: pass, 
-                        subject: "Propuesta Mayorista Yerba Mate Soberanía", 
-                        body: document.getElementById('emailBody').value, 
-                        image_url: document.getElementById('emailImage').value 
-                    })
-                });
+        if exhaustivo:
+            for link in list(set(links_to_check))[:2]:
+                try:
+                    r_sub = requests.get(link, timeout=4, headers=headers)
+                    found_emails.extend(re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', r_sub.text))
+                except:
+                    pass
 
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                let buffer = "";
+        for e in found_emails:
+            if validar_email(e) and not e.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.pdf', '.css')):
+                info["email"] = e.lower()
+                break
+    except:
+        pass
+    return info
 
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    
-                    buffer += decoder.decode(value, {stream: true});
-                    const lines = buffer.split('\n\n');
-                    buffer = lines.pop();
+def enviar_mail_soberania(smtp_user, smtp_pass, destino, asunto, cuerpo, imagen_url):
+    """Lógica de envío SMTP con descarga de imagen adjunta y manejo de errores detallado."""
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = f"Juan Ignacio Lewczuk <{smtp_user}>"
+        msg['To'] = destino
+        msg['Subject'] = asunto
+        msg.attach(MIMEText(cuerpo, 'plain'))
 
-                    for(const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            try {
-                                const d = JSON.parse(line.replace('data: ', ''));
-                                if (d.status === 'finished') { 
-                                    btn.disabled = false; btn.innerHTML = '¡Campaña Exitosa!'; 
-                                    alert("Campaña completada."); 
-                                } else if (d.index !== undefined) {
-                                    const pct = Math.round((d.progress / selected.length) * 100);
-                                    document.getElementById('progress').innerText = `${pct}%`;
-                                    const log = document.createElement('div');
-                                    log.className = d.success ? "text-green-500" : "text-red-500";
-                                    log.innerText = `> [${d.progress}/${selected.length}] Enviado a ${selected[d.progress-1].nombre}: ${d.msg}`;
-                                    document.getElementById('logs').prepend(log);
-                                    const statusRow = document.getElementById(`status-${d.index}`);
-                                    if(statusRow) statusRow.innerHTML = `<span class="text-[9px] ${d.success ? 'text-green-500' : 'text-red-500'} font-black uppercase italic">${d.success ? 'Enviado' : 'Error'}</span>`;
-                                }
-                            } catch(e) {}
-                        }
-                    }
-                }
-            } catch(e) { btn.disabled = false; }
-        }
+        img_data = None
+        if imagen_url:
+            try:
+                raw_url = imagen_url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
+                img_data = requests.get(raw_url, timeout=12).content
+            except Exception as e:
+                print(f"Error descargando imagen de GitHub: {e}")
 
-        function toggleAll() { document.querySelectorAll('.lead-check').forEach(c => c.checked = document.getElementById('selectAll').checked); }
-        function abrirChat(idx) { 
-            const l = leads[idx]; if(!l) return;
-            const body = document.getElementById('waBody').value.replace('{nombre}', l.nombre); 
-            window.open(`https://web.whatsapp.com/send?phone=${l.telefono}&text=${encodeURIComponent(body)}`, "wa_session"); 
-            const s = document.getElementById(`status-${idx}`);
-            if(s) s.innerHTML = `<span class="text-emerald-500 font-black uppercase text-[9px]">WhatsApp Abierto</span>`; 
-        }
-        function iniciarWhatsAppMasivo() { 
-            waCola = []; document.querySelectorAll('.lead-check:checked').forEach(c => { if(leads[c.dataset.index].telefono) waCola.push(parseInt(c.dataset.index)); });
-            if(waCola.length === 0) return alert("Sin teléfonos válidos."); 
-            waCursor = 0; document.getElementById('waModal').style.display = 'flex'; actualizarModalWA(); 
-        }
-        function actualizarModalWA() { 
-            if(waCursor >= waCola.length) { document.getElementById('modalTitle').innerText = "Fin"; document.getElementById('btnSiguiente').style.display = 'none'; return; }
-            const current = leads[waCola[waCursor]];
-            document.getElementById('modalTitle').innerText = current.nombre;
-            document.getElementById('modalProgress').innerText = `${waCursor + 1} de ${waCola.length}`;
-            document.querySelectorAll('tr').forEach(r => r.classList.remove('sending-row'));
-            const row = document.getElementById(`row-${waCola[waCursor]}`); if(row) row.classList.add('sending-row'); 
-        }
-        function abrirSiguienteWA() { abrirChat(waCola[waCursor]); waCursor++; actualizarModalWA(); }
-        function cerrarModal(id) { document.getElementById(id).style.display = 'none'; }
-        function toggleGuia() { const g = document.getElementById('guiaEmail'); g.style.display = (g.style.display === 'block') ? 'none' : 'block'; }
-        function cerrarTutorial() { 
-            if (steps[curStep].highlight) document.getElementById(steps[curStep].highlight).classList.remove('highlight-element');
-            document.getElementById('tutorialModal').style.display = 'none'; sessionStorage.setItem('tutorialVisto', 'true'); 
-        }
-        function nextStep() { 
-            if (steps[curStep].highlight) document.getElementById(steps[curStep].highlight).classList.remove('highlight-element'); 
-            curStep++; 
-            if (curStep >= steps.length) return cerrarTutorial(); 
-            const s = steps[curStep]; 
-            document.getElementById('tutorialText').innerText = s.text; 
-            if (s.highlight) { 
-                const el = document.getElementById(s.highlight); 
-                el.classList.add('highlight-element'); 
-                el.scrollIntoView({ behavior: 'smooth', block: 'center' }); 
-            } 
-        }
-        async function generarPitchIA() { 
-            const btn = document.getElementById('btnPitchIA'); const t = document.getElementById('waBody'); 
-            btn.innerText = "..."; btn.classList.add('ai-loading');
-            const res = await callGemini("Genera un mensaje corto de WhatsApp para vender Yerba Soberanía. Usa {nombre}.", "Vendedor."); 
-            if(res && res.text) t.value = res.text; 
-            btn.innerText = "✨ Sugerir Texto"; btn.classList.remove('ai-loading');
-        }
-    </script>
-</body>
-</html>
+        if not img_data and os.path.exists('producto.png'):
+            try:
+                with open('producto.png', 'rb') as f:
+                    img_data = f.read()
+            except: pass
+
+        if img_data:
+            try:
+                adjunto = MIMEImage(img_data)
+                adjunto.add_header('Content-Disposition', 'attachment', filename="Yerba_Mate_Soberania.png")
+                msg.attach(adjunto)
+            except: pass
+
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.sendmail(smtp_user, destino, msg.as_string())
+        server.quit()
+        return True, "Enviado correctamente"
+    except smtplib.SMTPAuthenticationError:
+        return False, "Autenticación fallida: Revisa tu clave de 16 letras"
+    except Exception as e:
+        return False, str(e)
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/search_places', methods=['POST'])
+def search_places():
+    data = request.json
+    zona = data.get('zona')
+    exhaustivo = data.get('exhaustivo', False)
+    if not gmaps: return jsonify({'error': 'Google Maps API no configurada'}), 500
+    try:
+        response = gmaps.places(query=f"dieteticas en {zona}")
+        results = response.get('results', [])
+        leads = []
+        for p in results[:15]: # Límite para evitar Timeouts
+            try:
+                det = gmaps.place(place_id=p['place_id'], fields=['name', 'formatted_address', 'formatted_phone_number', 'website'])['result']
+                tel_raw = det.get('formatted_phone_number', '')
+                tel_clean = re.sub(r'\D', '', tel_raw)
+                if tel_clean and not tel_clean.startswith('54'): tel_clean = '54' + tel_clean
+                web = det.get('website', '')
+                contacto = scraping_profundo_contacto(web, exhaustivo) if web else {"email": "", "facebook": "", "instagram": ""}
+                leads.append({
+                    'id': p['place_id'], 'nombre': det.get('name'), 'direccion': det.get('formatted_address'),
+                    'telefono': tel_clean, 'tel_display': tel_raw, 'email': contacto["email"],
+                    'facebook': contacto["facebook"], 'instagram': contacto["instagram"], 'web': web
+                })
+            except: continue
+        return jsonify({'success': True, 'leads': leads})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/start_email_campaign', methods=['POST'])
+def start_email_campaign():
+    data = request.json
+    selected = data.get('leads', [])
+    user = data.get('email_user')
+    password = data.get('email_pass')
+    subject = data.get('subject')
+    body = data.get('body')
+    image_url = data.get('image_url')
+
+    def generate():
+        total = len(selected)
+        yield f"data: {json.dumps({'status': 'start', 'total': total})}\n\n"
+        for i, lead in enumerate(selected):
+            # Pausa para evitar que Gmail bloquee la cuenta
+            if i > 0: time.sleep(random.randint(25, 40))
+            
+            cuerpo_final = body.replace('{nombre}', lead['nombre']).replace('{direccion}', lead['direccion'])
+            asunto_final = subject.replace('{nombre}', lead['nombre'])
+            
+            ok, msg = enviar_mail_soberania(user, password, lead['email'], asunto_final, cuerpo_final, image_url)
+            
+            res_info = {'progress': i+1, 'msg': msg, 'index': lead.get('original_index'), 'success': ok}
+            yield f"data: {json.dumps(res_info)}\n\n"
+        yield f"data: {json.dumps({'status': 'finished'})}\n\n"
+        
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
+
+@app.route('/api/ai_query', methods=['POST'])
+def ai_query():
+    if not GEMINI_API_KEY: return jsonify({'error': 'Variable GEMINI_API_KEY no configurada'}), 500
+    data = request.json
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key={GEMINI_API_KEY}"
+    payload = {
+        "contents": [{"parts": [{"text": data.get('prompt')}]}],
+        "systemInstruction": {"parts": [{"text": data.get('systemInstruction', 'Eres un experto en ventas.')}]}
+    }
+    try:
+        res = requests.post(url, json=payload, timeout=25)
+        if res.status_code == 429: return jsonify({'error': 'QUOTA_EXCEEDED', 'retry_after': 20}), 429
+        result = res.json()
+        if 'candidates' in result:
+            text = result['candidates'][0]['content']['parts'][0]['text']
+            return jsonify({'text': text})
+        return jsonify({'error': 'Sin respuesta de IA'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
