@@ -674,7 +674,88 @@ Juan Ignacio Lewczuk
             abortControllers = [];
         }
 
-        // ========== BÚSQUEDA DE EMAILS CON PAUSAS ==========
+        // ========== FUNCIONES DE BÚSQUEDA CORREGIDAS ==========
+        async function buscar() {
+            const zonaInput = document.getElementById('zona').value;
+            if(!zonaInput) return;
+            
+            cancelarTodasLasPeticionesIA();
+            revelandoEmails = false;
+            
+            const btn = document.getElementById('btnBuscar');
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            btn.disabled = true;
+            
+            try {
+                // Usar ruta relativa
+                const url = '/search_places';
+                
+                const res = await fetch(url, { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({zona: zonaInput}) 
+                });
+                
+                const data = await res.json();
+                
+                // ✅ VERIFICAR success EN LUGAR DE ASUMIR ÉXITO
+                if (data.success === false) {
+                    mostrarNotificacion(`❌ ${data.error || 'Error en la búsqueda'}`, 'error');
+                    leads = [];
+                    renderTable();
+                    document.getElementById('stats').innerText = 'ERROR';
+                    document.getElementById('btnAnalizarIA').classList.add('hidden');
+                } else {
+                    leads = data.leads || []; 
+                    renderTable();
+                    document.getElementById('stats').innerText = `${leads.length} RESULTADOS`;
+                    
+                    if (leads.length > 0) {
+                        document.getElementById('btnAnalizarIA').classList.remove('hidden');
+                        mostrarNotificacion(`✅ ${leads.length} comercios encontrados`, 'success');
+                        
+                        // Iniciar búsqueda de emails con pausas
+                        setTimeout(() => {
+                            autoRevelarEmails();
+                        }, 1000);
+                    } else {
+                        mostrarNotificacion('⚠️ No se encontraron resultados', 'warning');
+                        document.getElementById('btnAnalizarIA').classList.add('hidden');
+                    }
+                }
+                
+            } catch(e) { 
+                console.error('Error en búsqueda:', e);
+                mostrarNotificacion('❌ Error de conexión con el servidor', 'error');
+                leads = [];
+                renderTable();
+                document.getElementById('stats').innerText = 'ERROR CONEXIÓN';
+            } finally { 
+                btn.innerHTML = '<i class="fa-solid fa-search"></i>';
+                btn.disabled = false;
+            }
+        }
+
+        // ========== FUNCIÓN DE DIAGNÓSTICO ==========
+        async function verificarAPIKeys() {
+            try {
+                const res = await fetch('/debug/keys');
+                const data = await res.json();
+                console.log('Estado de API Keys:', data);
+                
+                if (!data.maps_key_configured) {
+                    mostrarNotificacion('⚠️ Maps_KEY no configurada en Render', 'error');
+                } else if (!data.gmaps_client_initialized) {
+                    mostrarNotificacion('⚠️ Google Maps client no inicializado', 'error');
+                } else {
+                    mostrarNotificacion('✅ API Keys configuradas correctamente', 'success');
+                }
+            } catch(e) {
+                console.error('Error verificando keys:', e);
+            }
+        }
+
+        // ========== AUTO REVELAR EMAILS CON IA ==========
         async function autoRevelarEmails() {
             if (revelandoEmails) return;
             revelandoEmails = true;
@@ -690,7 +771,7 @@ Juan Ignacio Lewczuk
                 const el = document.getElementById(`email-text-${i}`);
                 if (el) el.innerHTML = '<span class="animate-pulse text-blue-500 text-[9px]">✨ Buscando con IA...</span>';
                 
-                // PAUSA DE 5 SEGUNDOS ENTRE CADA PETICIÓN PARA NO SATURAR
+                // PAUSA DE 5 SEGUNDOS ENTRE CADA PETICIÓN
                 if (i > 0) {
                     await new Promise(r => setTimeout(r, pausaIA));
                 }
@@ -727,43 +808,6 @@ Juan Ignacio Lewczuk
             
             revelandoEmails = false;
             mostrarNotificacion('✨ Búsqueda de emails completada', 'success');
-        }
-
-        // ========== FUNCIONES DE BÚSQUEDA ==========
-        async function buscar() {
-            const zonaInput = document.getElementById('zona').value;
-            if(!zonaInput) return;
-            
-            cancelarTodasLasPeticionesIA();
-            revelandoEmails = false;
-            
-            const btn = document.getElementById('btnBuscar');
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-            
-            try {
-                const res = await fetch('/search_places', { 
-                    method: 'POST', 
-                    headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify({zona: zonaInput}) 
-                });
-                
-                if (!res.ok) throw new Error("Server Error");
-                const data = await res.json();
-                leads = data.leads || []; 
-                renderTable();
-                document.getElementById('stats').innerText = `${leads.length} RESULTADOS`;
-                document.getElementById('btnAnalizarIA').classList.remove('hidden');
-                
-                // Iniciar búsqueda de emails con pausas
-                setTimeout(() => {
-                    autoRevelarEmails();
-                }, 1000);
-                
-            } catch(e) { 
-                mostrarNotificacion('❌ Error en la búsqueda', 'error');
-            } finally { 
-                btn.innerHTML = '<i class="fa-solid fa-search"></i>'; 
-            }
         }
 
         // ========== RENDERIZADO DE TABLA ==========
@@ -1351,6 +1395,9 @@ Juan Ignacio Lewczuk
             
             // Validar clave al cargar
             validarClave();
+            
+            // Verificar API Keys
+            verificarAPIKeys();
             
             // Tutorial automático
             if (!sessionStorage.getItem('tutorialVisto')) {
