@@ -663,7 +663,9 @@ def search_places_stream():
                     
                 except Exception as e:
                     logger.error(f"Error procesando lugar: {e}")
-                    yield f"data: {json.dumps({'status': 'error', 'message': f'Error en {p.get("name", "lugar")}: {str(e)[:50]}'})}\n\n"
+                    # CORREGIDO: Usar comillas simples para el nombre del lugar
+                    nombre_lugar = p.get("name", "lugar")
+                    yield f"data: {json.dumps({'status': 'error', 'message': f'Error en {nombre_lugar}: {str(e)[:50]}'})}\n\n"
                     procesados += 1
                     continue
             
