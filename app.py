@@ -32,6 +32,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+# Clave secreta desde variable de entorno
 app.secret_key = os.environ.get('SECRET_KEY', 'clave-por-defecto-cambiar')
 CORS(app)
 
@@ -39,9 +40,11 @@ app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # ========== CONFIGURACIÓN DESDE VARIABLES DE ENTORNO ==========
+# Configuración OAuth de Gmail
 SCOPES = ['https://www.googleapis.com/auth/gmail.send']
 REDIRECT_URI = os.environ.get('REDIRECT_URI', 'https://yerbamate.onrender.com/oauth2callback')
 
+# Credenciales de Google desde variables de entorno
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
 GOOGLE_PROJECT_ID = os.environ.get('GOOGLE_PROJECT_ID', 'automatizacion-485503')
@@ -60,18 +63,20 @@ GEMINI_API_KEY = (
     ''
 )
 
-# Logging de configuración
+# Logging de configuración (sin mostrar las claves completas)
 logger.info("=" * 50)
 logger.info("CONFIGURACIÓN DE API KEYS:")
 logger.info(f"📌 Maps_KEY: {'✅ Configurada' if GOOGLE_MAPS_KEY else '❌ NO CONFIGURADA'}")
 logger.info(f"📌 GEMINI_API_KEY: {'✅ Configurada' if GEMINI_API_KEY else '❌ NO CONFIGURADA'}")
 logger.info(f"📌 GMAIL_CLIENT_ID: {'✅ Configurada' if GOOGLE_CLIENT_ID else '❌ NO CONFIGURADA'}")
+logger.info(f"📌 REDIRECT_URI: {REDIRECT_URI}")
 logger.info("=" * 50)
 
 # Inicializar Google Maps client
 try:
     if GOOGLE_MAPS_KEY:
         gmaps = googlemaps.Client(key=GOOGLE_MAPS_KEY, timeout=10)
+        # Test rápido
         try:
             test = gmaps.geocode("Buenos Aires")
             logger.info("✅ Google Maps API funcionando correctamente")
@@ -262,10 +267,12 @@ def enviar_mail_soberania(smtp_user, smtp_pass, destino, asunto, cuerpo, adjunta
 def connect_gmail():
     """Inicia el flujo de autorización de Gmail."""
     try:
+        # Verificar que las credenciales están configuradas
         if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
             logger.error("Credenciales de Google no configuradas en variables de entorno")
             return jsonify({'error': 'Configuración de Gmail no encontrada'}), 500
         
+        # Configuración OAuth desde variables de entorno
         client_config = {
             "web": {
                 "client_id": GOOGLE_CLIENT_ID,
@@ -307,6 +314,7 @@ def oauth2callback():
             logger.error("No hay state en sesión")
             return redirect('/?error=no_state')
         
+        # Configuración OAuth desde variables de entorno
         client_config = {
             "web": {
                 "client_id": GOOGLE_CLIENT_ID,
@@ -326,8 +334,10 @@ def oauth2callback():
             redirect_uri=REDIRECT_URI
         )
         
+        # Obtener el código de autorización de la URL
         flow.fetch_token(authorization_response=request.url)
         
+        # Guardar credenciales
         credentials = flow.credentials
         session['credentials'] = {
             'token': credentials.token,
@@ -377,6 +387,7 @@ def send_bulk_emails_gmail():
     body = data.get('body', '')
     attach_img = data.get('attach_image', False)
     
+    # Cargar credenciales
     creds_data = session['credentials']
     creds = Credentials(
         token=creds_data['token'],
@@ -387,6 +398,7 @@ def send_bulk_emails_gmail():
         scopes=creds_data['scopes']
     )
     
+    # Refrescar token si es necesario
     if creds.expired and creds.refresh_token:
         try:
             creds.refresh(Request())
@@ -416,15 +428,17 @@ def send_bulk_emails_gmail():
             
             for i, lead in enumerate(selected):
                 if i > 0:
-                    time.sleep(random.uniform(2, 4))
+                    time.sleep(random.uniform(2, 4))  # Pausa entre emails para evitar límites
                 
                 try:
                     if not lead.get('email'):
                         yield f"data: {json.dumps({'progress': i+1, 'msg': 'Sin email', 'index': lead.get('original_index'), 'success': False})}\n\n"
                         continue
                     
+                    # Crear mensaje
                     message = EmailMessage()
                     
+                    # Personalizar cuerpo
                     cuerpo_personalizado = body
                     if '{nombre}' in cuerpo_personalizado:
                         cuerpo_personalizado = cuerpo_personalizado.replace('{nombre}', lead.get('nombre', ''))
@@ -433,9 +447,10 @@ def send_bulk_emails_gmail():
                     
                     message.set_content(cuerpo_personalizado)
                     message['To'] = lead['email']
-                    message['From'] = 'me'
+                    message['From'] = 'me'  # Gmail usará el email autorizado
                     message['Subject'] = subject
                     
+                    # Adjuntar imagen si existe
                     if attach_img and os.path.exists('producto.png'):
                         with open('producto.png', 'rb') as f:
                             image_data = f.read()
@@ -443,9 +458,11 @@ def send_bulk_emails_gmail():
                                              subtype='png', 
                                              filename='producto_soberania.png')
                     
+                    # Codificar para API de Gmail
                     encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
                     create_message = {'raw': encoded_message}
                     
+                    # Enviar
                     send_message = service.users().messages().send(
                         userId='me', 
                         body=create_message
@@ -459,7 +476,7 @@ def send_bulk_emails_gmail():
                     logger.error(f"Error HTTP enviando a {lead.get('email')}: {error_msg}")
                     if 'quota' in error_msg.lower():
                         yield f"data: {json.dumps({'progress': i+1, 'msg': 'Límite de envíos excedido', 'index': lead.get('original_index'), 'success': False})}\n\n"
-                        time.sleep(10)
+                        time.sleep(10)  # Esperar más si hay límite de cuota
                     else:
                         yield f"data: {json.dumps({'progress': i+1, 'msg': f'Error: {error_msg[:30]}', 'index': lead.get('original_index'), 'success': False})}\n\n"
                         
@@ -478,6 +495,7 @@ def send_bulk_emails_gmail():
     response = Response(stream_with_context(generate()), mimetype='text/event-stream')
     response.headers['X-Accel-Buffering'] = 'no'
     response.headers['Cache-Control'] = 'no-cache'
+    response.headers['Content-Type'] = 'text/event-stream'
     return response
 
 # ========== RUTAS DE RESPALDO (SMTP) ==========
@@ -532,6 +550,7 @@ def start_email_campaign():
     response = Response(stream_with_context(generate()), mimetype='text/event-stream')
     response.headers['X-Accel-Buffering'] = 'no'
     response.headers['Cache-Control'] = 'no-cache'
+    response.headers['Content-Type'] = 'text/event-stream'
     return response
 
 # ========== RUTAS PRINCIPALES ==========
@@ -551,7 +570,7 @@ def get_producto_image():
         return send_file('producto.png', mimetype='image/png')
     return "Archivo producto.png no encontrado", 404
 
-# ========== RUTA DE BÚSQUEDA MEJORADA - 40 RESULTADOS ==========
+# ========== RUTA DE BÚSQUEDA MEJORADA - 40 RESULTADOS (CORREGIDA) ==========
 @app.route('/search_places', methods=['POST'])
 def search_places():
     """
@@ -649,7 +668,7 @@ def search_places():
                 
                 logger.info(f"Procesando {idx+1}/{len(todos_los_leads)}: {p.get('name', 'Sin nombre')}")
                 
-                # Obtener detalles completos del lugar
+                # Obtener detalles completos del lugar - CAMPOS CORREGIDOS
                 det = gmaps.place(
                     place_id=p['place_id'], 
                     fields=[
@@ -661,7 +680,9 @@ def search_places():
                         'user_ratings_total',
                         'opening_hours',
                         'price_level',
-                        'types'
+                        'business_status',
+                        'geometry/location',
+                        'vicinity'
                     ]
                 )['result']
                 
@@ -710,7 +731,7 @@ def search_places():
                     'rating': det.get('rating', 'N/A'),
                     'total_reviews': det.get('user_ratings_total', 0),
                     'horario': horario,
-                    'tipos': ', '.join(det.get('types', [])[:3]) if det.get('types') else ''
+                    'business_status': det.get('business_status', 'OPERATIONAL')
                 })
                 
             except Exception as e:
@@ -741,7 +762,10 @@ def generate_csv():
     data = request.json
     selected = data.get('leads', [])
     
+    # Crear DataFrame
     df = pd.DataFrame(selected)
+    
+    # Guardar a CSV
     csv_path = os.path.join(app.config['UPLOAD_FOLDER'], 'leads_seleccionados.csv')
     df.to_csv(csv_path, index=False, encoding='utf-8-sig')
     
@@ -771,6 +795,7 @@ def ai_query():
     system_instruction = data.get('systemInstruction', 'Asistente comercial.')
     timeout = data.get('timeout', 8)
 
+    # Respuesta por defecto si falla
     default_response = "No encontrado"
     
     if "email" in prompt.lower() or "contacto" in prompt.lower():
