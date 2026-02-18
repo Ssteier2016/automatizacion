@@ -32,7 +32,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-# Clave secreta desde variable de entorno
 app.secret_key = os.environ.get('SECRET_KEY', 'clave-por-defecto-cambiar')
 CORS(app)
 
@@ -40,11 +39,9 @@ app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # ========== CONFIGURACIÓN DESDE VARIABLES DE ENTORNO ==========
-# Configuración OAuth de Gmail
 SCOPES = ['https://www.googleapis.com/auth/gmail.send']
 REDIRECT_URI = os.environ.get('REDIRECT_URI', 'https://yerbamate.onrender.com/oauth2callback')
 
-# Credenciales de Google desde variables de entorno
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
 GOOGLE_PROJECT_ID = os.environ.get('GOOGLE_PROJECT_ID', 'automatizacion-485503')
@@ -63,20 +60,18 @@ GEMINI_API_KEY = (
     ''
 )
 
-# Logging de configuración (sin mostrar las claves completas)
+# Logging de configuración
 logger.info("=" * 50)
 logger.info("CONFIGURACIÓN DE API KEYS:")
 logger.info(f"📌 Maps_KEY: {'✅ Configurada' if GOOGLE_MAPS_KEY else '❌ NO CONFIGURADA'}")
 logger.info(f"📌 GEMINI_API_KEY: {'✅ Configurada' if GEMINI_API_KEY else '❌ NO CONFIGURADA'}")
 logger.info(f"📌 GMAIL_CLIENT_ID: {'✅ Configurada' if GOOGLE_CLIENT_ID else '❌ NO CONFIGURADA'}")
-logger.info(f"📌 REDIRECT_URI: {REDIRECT_URI}")
 logger.info("=" * 50)
 
 # Inicializar Google Maps client
 try:
     if GOOGLE_MAPS_KEY:
         gmaps = googlemaps.Client(key=GOOGLE_MAPS_KEY, timeout=10)
-        # Test rápido
         try:
             test = gmaps.geocode("Buenos Aires")
             logger.info("✅ Google Maps API funcionando correctamente")
@@ -98,10 +93,10 @@ def validar_email(email):
     patron = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return bool(re.match(patron, email))
 
-def scraping_profundo_contacto(url_base, exhaustivo=True):
+def scraping_profundo_contacto(url_base, exhaustivo=False):
     """
-    Busca emails y redes sociales con búsqueda más profunda.
-    Versión mejorada para extraer más información.
+    Busca emails y redes sociales con timeout controlado.
+    exhaustivo=False por defecto para evitar timeouts.
     """
     info = {"email": "", "facebook": "", "instagram": "", "twitter": "", "linkedin": ""}
     
@@ -109,118 +104,48 @@ def scraping_profundo_contacto(url_base, exhaustivo=True):
         return info
     
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'es-ES,es;q=0.9',
         'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1'
     }
     
     try:
-        # Intentar obtener la página principal
-        res = requests.get(url_base, timeout=5, headers=headers, allow_redirects=True)
+        # Timeout más corto: 3 segundos
+        res = requests.get(url_base, timeout=3, headers=headers, allow_redirects=True)
         if res.status_code != 200:
             return info
         
         texto_pagina = res.text
-        soup = BeautifulSoup(texto_pagina, 'html.parser')
         
-        # 1. BUSCAR EMAILS - Patrones mejorados
+        # Buscar emails - patrones básicos
         email_patterns = [
             r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
             r'email["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
             r'mail["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
-            r'contacto["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
-            r'contact["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
-            r'e-mail["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
-            r'correo["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
+            r'contacto["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
         ]
         
         for pattern in email_patterns:
             found_emails = re.findall(pattern, texto_pagina, re.IGNORECASE)
             for e in found_emails:
-                if validar_email(e) and not any(ext in e.lower() for ext in ['.png', '.jpg', '.gif', '.css', '.js', '.svg']):
+                if validar_email(e) and not any(ext in e.lower() for ext in ['.png', '.jpg', '.gif', '.css', '.js']):
                     info["email"] = e.lower()
                     break
             if info["email"]:
                 break
         
-        # 2. BUSCAR REDES SOCIALES en toda la página
-        for a in soup.find_all('a', href=True):
+        # Buscar redes sociales (solo primeros 20 links)
+        soup = BeautifulSoup(texto_pagina, 'html.parser')
+        for a in soup.find_all('a', href=True)[:20]:
             href = a['href'].lower()
-            texto = a.get_text().lower()
-            
-            # Instagram
-            if ('instagram.com' in href or 'instagram.com' in texto) and not info["instagram"]:
+            if 'instagram.com' in href and not info["instagram"]:
                 info["instagram"] = a['href']
-            
-            # Facebook
-            if ('facebook.com' in href or 'facebook.com' in texto) and not info["facebook"]:
+            if 'facebook.com' in href and not info["facebook"]:
                 info["facebook"] = a['href']
-            
-            # Twitter/X
-            if ('twitter.com' in href or 'x.com' in href) and not info["twitter"]:
-                info["twitter"] = a['href']
-            
-            # LinkedIn
-            if ('linkedin.com' in href) and not info["linkedin"]:
-                info["linkedin"] = a['href']
-        
-        # 3. BÚSQUEDA EXHAUSTIVA - Si no encontró email, buscar en páginas de contacto
-        if not info["email"] and exhaustivo:
-            # Buscar enlaces a páginas de contacto
-            paginas_contacto = ['contacto', 'contact', 'contactenos', 'contactanos', 'contact-us', 'contactar', 'sobre-nosotros', 'about', 'about-us']
-            
-            for a in soup.find_all('a', href=True):
-                href = a.get('href', '').lower()
-                texto = a.get_text().lower()
-                
-                # Verificar si es una página de contacto
-                if any(palabra in href or palabra in texto for palabra in paginas_contacto):
-                    # Construir URL completa
-                    if href.startswith('http'):
-                        url_contacto = href
-                    elif href.startswith('/'):
-                        url_contacto = urljoin(url_base, href)
-                    else:
-                        url_contacto = urljoin(url_base, '/' + href)
-                    
-                    # Hacer pausa para no saturar
-                    time.sleep(1)
-                    
-                    try:
-                        res_contacto = requests.get(url_contacto, timeout=5, headers=headers)
-                        if res_contacto.status_code == 200:
-                            texto_contacto = res_contacto.text
-                            
-                            # Buscar emails en la página de contacto
-                            for pattern in email_patterns:
-                                found = re.findall(pattern, texto_contacto, re.IGNORECASE)
-                                for e in found:
-                                    if validar_email(e):
-                                        info["email"] = e.lower()
-                                        break
-                                if info["email"]:
-                                    break
-                    except:
-                        continue
-                    
-                    if info["email"]:
-                        break
-        
-        # 4. ÚLTIMO RECURSO - Buscar en el footer
-        if not info["email"]:
-            footer = soup.find('footer')
-            if footer:
-                footer_text = footer.get_text()
-                for pattern in email_patterns:
-                    found = re.findall(pattern, footer_text, re.IGNORECASE)
-                    for e in found:
-                        if validar_email(e):
-                            info["email"] = e.lower()
-                            break
-                    if info["email"]:
-                        break
+            if 'twitter.com' in href or 'x.com' in href:
+                if not info["twitter"]:
+                    info["twitter"] = a['href']
         
     except requests.Timeout:
         logger.debug(f"Timeout en scraping: {url_base}")
@@ -267,12 +192,10 @@ def enviar_mail_soberania(smtp_user, smtp_pass, destino, asunto, cuerpo, adjunta
 def connect_gmail():
     """Inicia el flujo de autorización de Gmail."""
     try:
-        # Verificar que las credenciales están configuradas
         if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
             logger.error("Credenciales de Google no configuradas en variables de entorno")
             return jsonify({'error': 'Configuración de Gmail no encontrada'}), 500
         
-        # Configuración OAuth desde variables de entorno
         client_config = {
             "web": {
                 "client_id": GOOGLE_CLIENT_ID,
@@ -314,7 +237,6 @@ def oauth2callback():
             logger.error("No hay state en sesión")
             return redirect('/?error=no_state')
         
-        # Configuración OAuth desde variables de entorno
         client_config = {
             "web": {
                 "client_id": GOOGLE_CLIENT_ID,
@@ -334,10 +256,8 @@ def oauth2callback():
             redirect_uri=REDIRECT_URI
         )
         
-        # Obtener el código de autorización de la URL
         flow.fetch_token(authorization_response=request.url)
         
-        # Guardar credenciales
         credentials = flow.credentials
         session['credentials'] = {
             'token': credentials.token,
@@ -387,7 +307,6 @@ def send_bulk_emails_gmail():
     body = data.get('body', '')
     attach_img = data.get('attach_image', False)
     
-    # Cargar credenciales
     creds_data = session['credentials']
     creds = Credentials(
         token=creds_data['token'],
@@ -398,7 +317,6 @@ def send_bulk_emails_gmail():
         scopes=creds_data['scopes']
     )
     
-    # Refrescar token si es necesario
     if creds.expired and creds.refresh_token:
         try:
             creds.refresh(Request())
@@ -428,17 +346,15 @@ def send_bulk_emails_gmail():
             
             for i, lead in enumerate(selected):
                 if i > 0:
-                    time.sleep(random.uniform(2, 4))  # Pausa entre emails para evitar límites
+                    time.sleep(random.uniform(2, 4))
                 
                 try:
                     if not lead.get('email'):
                         yield f"data: {json.dumps({'progress': i+1, 'msg': 'Sin email', 'index': lead.get('original_index'), 'success': False})}\n\n"
                         continue
                     
-                    # Crear mensaje
                     message = EmailMessage()
                     
-                    # Personalizar cuerpo
                     cuerpo_personalizado = body
                     if '{nombre}' in cuerpo_personalizado:
                         cuerpo_personalizado = cuerpo_personalizado.replace('{nombre}', lead.get('nombre', ''))
@@ -447,10 +363,9 @@ def send_bulk_emails_gmail():
                     
                     message.set_content(cuerpo_personalizado)
                     message['To'] = lead['email']
-                    message['From'] = 'me'  # Gmail usará el email autorizado
+                    message['From'] = 'me'
                     message['Subject'] = subject
                     
-                    # Adjuntar imagen si existe
                     if attach_img and os.path.exists('producto.png'):
                         with open('producto.png', 'rb') as f:
                             image_data = f.read()
@@ -458,11 +373,9 @@ def send_bulk_emails_gmail():
                                              subtype='png', 
                                              filename='producto_soberania.png')
                     
-                    # Codificar para API de Gmail
                     encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
                     create_message = {'raw': encoded_message}
                     
-                    # Enviar
                     send_message = service.users().messages().send(
                         userId='me', 
                         body=create_message
@@ -476,7 +389,7 @@ def send_bulk_emails_gmail():
                     logger.error(f"Error HTTP enviando a {lead.get('email')}: {error_msg}")
                     if 'quota' in error_msg.lower():
                         yield f"data: {json.dumps({'progress': i+1, 'msg': 'Límite de envíos excedido', 'index': lead.get('original_index'), 'success': False})}\n\n"
-                        time.sleep(10)  # Esperar más si hay límite de cuota
+                        time.sleep(10)
                     else:
                         yield f"data: {json.dumps({'progress': i+1, 'msg': f'Error: {error_msg[:30]}', 'index': lead.get('original_index'), 'success': False})}\n\n"
                         
@@ -495,7 +408,6 @@ def send_bulk_emails_gmail():
     response = Response(stream_with_context(generate()), mimetype='text/event-stream')
     response.headers['X-Accel-Buffering'] = 'no'
     response.headers['Cache-Control'] = 'no-cache'
-    response.headers['Content-Type'] = 'text/event-stream'
     return response
 
 # ========== RUTAS DE RESPALDO (SMTP) ==========
@@ -550,7 +462,6 @@ def start_email_campaign():
     response = Response(stream_with_context(generate()), mimetype='text/event-stream')
     response.headers['X-Accel-Buffering'] = 'no'
     response.headers['Cache-Control'] = 'no-cache'
-    response.headers['Content-Type'] = 'text/event-stream'
     return response
 
 # ========== RUTAS PRINCIPALES ==========
@@ -570,12 +481,12 @@ def get_producto_image():
         return send_file('producto.png', mimetype='image/png')
     return "Archivo producto.png no encontrado", 404
 
-# ========== RUTA DE BÚSQUEDA MEJORADA - 40 RESULTADOS (CORREGIDA) ==========
+# ========== RUTA DE BÚSQUEDA MEJORADA - 40 RESULTADOS CON LOTES ==========
 @app.route('/search_places', methods=['POST'])
 def search_places():
     """
     Busca dietéticas en Google Maps.
-    VERSIÓN MEJORADA: Hasta 40 resultados usando paginación
+    Procesa en LOTES de 12 para evitar timeouts
     """
     data = request.json
     zona = data.get('zona')
@@ -604,8 +515,7 @@ def search_places():
             f"dietética {zona}",
             f"health food store {zona}",
             f"natural products {zona}",
-            f"tienda natural {zona}",
-            f"alimentos saludables {zona}"
+            f"tienda natural {zona}"
         ]
         
         todos_los_leads = []
@@ -621,7 +531,6 @@ def search_places():
                     logger.info(f"✅ Encontrados {len(response['results'])} con: '{query}'")
                     query_usada = query
                     break
-                # Pequeña pausa entre queries para no saturar
                 time.sleep(0.5)
             except Exception as e:
                 logger.debug(f"Error con query '{query}': {e}")
@@ -630,16 +539,14 @@ def search_places():
         if not response:
             return jsonify({'success': True, 'leads': [], 'total': 0}), 200
         
-        # Obtener primera página de resultados (hasta 20)
+        # Obtener primera página (20 resultados)
         resultados_pagina1 = response.get('results', [])
         todos_los_leads.extend(resultados_pagina1)
-        
         logger.info(f"📄 Página 1: {len(resultados_pagina1)} resultados")
         
-        # Intentar obtener segunda página (más 20 resultados)
+        # Intentar obtener segunda página (otros 20)
         if 'next_page_token' in response:
-            # Esperar 2 segundos como recomienda Google antes de pedir siguiente página
-            logger.info("⏳ Esperando 2 segundos para solicitar siguiente página...")
+            logger.info("⏳ Esperando 2 segundos para siguiente página...")
             time.sleep(2)
             
             try:
@@ -655,89 +562,94 @@ def search_places():
         
         # Limitar a máximo 40 resultados
         todos_los_leads = todos_los_leads[:40]
-        logger.info(f"📊 Total resultados a procesar: {len(todos_los_leads)}")
+        total_a_procesar = len(todos_los_leads)
+        logger.info(f"📊 Total resultados a procesar: {total_a_procesar}")
         
         leads = []
+        BATCH_SIZE = 12  # Procesar de a 12 por lote
         
-        # Procesar cada resultado con pausas para no saturar la API
-        for idx, p in enumerate(todos_los_leads):
-            try:
-                # Pausa entre cada place detail request (500ms)
-                if idx > 0:
-                    time.sleep(0.5)
-                
-                logger.info(f"Procesando {idx+1}/{len(todos_los_leads)}: {p.get('name', 'Sin nombre')}")
-                
-                # Obtener detalles completos del lugar - CAMPOS CORREGIDOS
-                det = gmaps.place(
-                    place_id=p['place_id'], 
-                    fields=[
-                        'name', 
-                        'formatted_address', 
-                        'formatted_phone_number', 
-                        'website',
-                        'rating',
-                        'user_ratings_total',
-                        'opening_hours',
-                        'price_level',
-                        'business_status',
-                        'geometry/location',
-                        'vicinity'
-                    ]
-                )['result']
-                
-                # Procesar teléfono
-                tel_raw = det.get('formatted_phone_number', '')
-                tel_clean = re.sub(r'\D', '', tel_raw)
-                
-                if tel_clean:
-                    if not tel_clean.startswith('54'):
-                        if tel_clean.startswith('549'):
-                            tel_clean = tel_clean
-                        elif tel_clean.startswith('0'):
-                            tel_clean = '54' + tel_clean[1:]
-                        else:
-                            tel_clean = '54' + tel_clean
-                
-                web = det.get('website', '')
-                contacto = {"email": "", "facebook": "", "instagram": "", "twitter": "", "linkedin": ""}
-                
-                # Si tiene sitio web, hacer scraping profundo
-                if web:
-                    try:
-                        contacto = scraping_profundo_contacto(web, exhaustivo=True)
-                        # Pausa entre scraping para no saturar servidores
-                        time.sleep(1)
-                    except Exception as e:
-                        logger.error(f"Error en scraping de {web}: {e}")
-                
-                # Obtener horario si existe
-                horario = ""
-                if 'opening_hours' in det:
-                    if 'weekday_text' in det['opening_hours']:
-                        horario = ", ".join(det['opening_hours']['weekday_text'][:3])  # Solo primeros 3 días
-                
-                leads.append({
-                    'nombre': det.get('name', 'Sin nombre'),
-                    'direccion': det.get('formatted_address', 'Sin dirección'),
-                    'telefono': tel_clean[:15] if tel_clean else '',
-                    'tel_display': tel_raw[:20] if tel_raw else 'No disponible',
-                    'email': contacto["email"] or '',
-                    'facebook': contacto["facebook"] or '',
-                    'instagram': contacto["instagram"] or '',
-                    'twitter': contacto["twitter"] or '',
-                    'linkedin': contacto["linkedin"] or '',
-                    'web': web or '',
-                    'rating': det.get('rating', 'N/A'),
-                    'total_reviews': det.get('user_ratings_total', 0),
-                    'horario': horario,
-                    'business_status': det.get('business_status', 'OPERATIONAL')
-                })
-                
-            except Exception as e:
-                logger.error(f"Error procesando lugar {p.get('place_id', 'unknown')}: {e}")
-                continue
-
+        # Procesar en lotes para no saturar
+        for batch_start in range(0, total_a_procesar, BATCH_SIZE):
+            batch_end = min(batch_start + BATCH_SIZE, total_a_procesar)
+            logger.info(f"📦 Procesando lote {batch_start//BATCH_SIZE + 1}: {batch_start+1} a {batch_end}")
+            
+            for idx in range(batch_start, batch_end):
+                p = todos_los_leads[idx]
+                try:
+                    logger.info(f"Procesando {idx+1}/{total_a_procesar}: {p.get('name', 'Sin nombre')}")
+                    
+                    # Obtener detalles del lugar
+                    det = gmaps.place(
+                        place_id=p['place_id'], 
+                        fields=[
+                            'name', 
+                            'formatted_address', 
+                            'formatted_phone_number', 
+                            'website',
+                            'rating',
+                            'user_ratings_total',
+                            'opening_hours',
+                            'price_level',
+                            'business_status'
+                        ]
+                    )['result']
+                    
+                    # Procesar teléfono
+                    tel_raw = det.get('formatted_phone_number', '')
+                    tel_clean = re.sub(r'\D', '', tel_raw)
+                    
+                    if tel_clean:
+                        if not tel_clean.startswith('54'):
+                            if tel_clean.startswith('549'):
+                                tel_clean = tel_clean
+                            elif tel_clean.startswith('0'):
+                                tel_clean = '54' + tel_clean[1:]
+                            else:
+                                tel_clean = '54' + tel_clean
+                    
+                    web = det.get('website', '')
+                    contacto = {"email": "", "facebook": "", "instagram": "", "twitter": "", "linkedin": ""}
+                    
+                    # Scrapear sitio web si existe
+                    if web:
+                        try:
+                            contacto = scraping_profundo_contacto(web, exhaustivo=False)
+                            time.sleep(0.5)  # Pequeña pausa entre scrapings
+                        except Exception as e:
+                            logger.error(f"Error en scraping de {web}: {e}")
+                    
+                    # Obtener horario
+                    horario = ""
+                    if 'opening_hours' in det:
+                        if 'weekday_text' in det['opening_hours']:
+                            horario = ", ".join(det['opening_hours']['weekday_text'][:3])
+                    
+                    leads.append({
+                        'nombre': det.get('name', 'Sin nombre'),
+                        'direccion': det.get('formatted_address', 'Sin dirección'),
+                        'telefono': tel_clean[:15] if tel_clean else '',
+                        'tel_display': tel_raw[:20] if tel_raw else 'No disponible',
+                        'email': contacto["email"] or '',
+                        'facebook': contacto["facebook"] or '',
+                        'instagram': contacto["instagram"] or '',
+                        'twitter': contacto["twitter"] or '',
+                        'linkedin': contacto["linkedin"] or '',
+                        'web': web or '',
+                        'rating': det.get('rating', 'N/A'),
+                        'total_reviews': det.get('user_ratings_total', 0),
+                        'horario': horario,
+                        'business_status': det.get('business_status', 'OPERATIONAL')
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Error procesando lugar {p.get('place_id', 'unknown')}: {e}")
+                    continue
+            
+            # DESPUÉS DE CADA LOTE: descansar para liberar memoria
+            if batch_end < total_a_procesar:
+                logger.info("😴 Descansando 3 segundos antes del siguiente lote...")
+                time.sleep(3)
+        
         logger.info(f"✅ Total leads procesados: {len(leads)}")
         
         return jsonify({
@@ -762,10 +674,7 @@ def generate_csv():
     data = request.json
     selected = data.get('leads', [])
     
-    # Crear DataFrame
     df = pd.DataFrame(selected)
-    
-    # Guardar a CSV
     csv_path = os.path.join(app.config['UPLOAD_FOLDER'], 'leads_seleccionados.csv')
     df.to_csv(csv_path, index=False, encoding='utf-8-sig')
     
@@ -795,7 +704,6 @@ def ai_query():
     system_instruction = data.get('systemInstruction', 'Asistente comercial.')
     timeout = data.get('timeout', 8)
 
-    # Respuesta por defecto si falla
     default_response = "No encontrado"
     
     if "email" in prompt.lower() or "contacto" in prompt.lower():
