@@ -253,6 +253,24 @@
             font-weight: bold;
             color: #10b981;
         }
+        
+        /* ESTILOS PARA STREAMING */
+        .streaming-status {
+            background: #0f172a;
+            border-left: 3px solid #10b981;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 9px;
+            margin-top: 5px;
+            animation: pulse 2s infinite;
+        }
+        .highlight-new {
+            animation: highlightRow 1s ease;
+        }
+        @keyframes highlightRow {
+            0% { background-color: rgba(16, 185, 129, 0.3); }
+            100% { background-color: transparent; }
+        }
     </style>
 </head>
 <body class="bg-[#020617] text-slate-200 font-sans overflow-hidden">
@@ -274,15 +292,16 @@
             <div id="gmail-status-container" class="space-y-2"></div>
             <div id="send-buttons-container" class="space-y-2"></div>
 
-            <!-- 1. BUSCADOR - ACTUALIZADO A 40 RESULTADOS -->
+            <!-- 1. BUSCADOR - ACTUALIZADO A 40 RESULTADOS CON STREAMING -->
             <div id="tutorial-step-1" class="space-y-4 pt-4 rounded-2xl transition-all duration-300">
-                <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2">1. Localización <span class="text-emerald-500 ml-2">(hasta 40 resultados)</span></h3>
+                <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2">1. Localización <span class="text-emerald-500 ml-2">(streaming en vivo)</span></h3>
                 <div class="flex gap-2">
                     <input type="text" id="zona" placeholder="Ej: Morón, Buenos Aires" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-2xl text-sm outline-none focus:border-emerald-500 transition">
                     <button onclick="buscar()" id="btnBuscar" class="bg-emerald-600 px-5 rounded-2xl hover:bg-emerald-500 transition">
                         <i class="fa-solid fa-search"></i>
                     </button>
                 </div>
+                <div id="streamingStatus" class="text-[8px] text-emerald-500 hidden">📡 Buscando...</div>
                 <button onclick="analizarZonaIA()" id="btnAnalizarIA" class="w-full ai-button text-white font-bold py-2 px-4 rounded-xl text-[10px] uppercase flex items-center justify-center gap-2 hidden">
                     <span>✨ Analizar Estrategia IA</span>
                 </button>
@@ -624,6 +643,7 @@ Juan Ignacio Lewczuk
         let revelandoEmails = false;
         let abortControllers = [];
         let pausaIA = 5000; // 5 segundos entre peticiones a IA
+        let busquedaEnCurso = false;
         
         // VARIABLES PARA GMAIL
         let gmailAuthorized = false;
@@ -635,7 +655,7 @@ Juan Ignacio Lewczuk
             {
                 elemento: 'tutorial-step-1',
                 titulo: '🔍 PASO 1: BUSCAR COMERCIOS',
-                texto: 'Ingresa una zona (ej: "Morón, Buenos Aires") y presiona el botón de búsqueda. El sistema encontrará hasta 40 dietéticas con rating y horarios.',
+                texto: 'Ingresa una zona (ej: "Morón, Buenos Aires") y presiona el botón de búsqueda. Los resultados aparecerán en TIEMPO REAL mientras se encuentran.',
                 posicion: 'right'
             },
             {
@@ -979,65 +999,143 @@ Juan Ignacio Lewczuk
             abortControllers = [];
         }
 
-        // ========== FUNCIONES DE BÚSQUEDA ==========
+        // ========== NUEVA FUNCIÓN DE BÚSQUEDA CON STREAMING ==========
         async function buscar() {
             const zonaInput = document.getElementById('zona').value;
-            if(!zonaInput) return;
+            if(!zonaInput || busquedaEnCurso) return;
             
+            // Cancelar búsquedas IA anteriores
             cancelarTodasLasPeticionesIA();
             revelandoEmails = false;
             
+            // Limpiar resultados anteriores
+            leads = [];
+            renderTable();
+            
             const btn = document.getElementById('btnBuscar');
+            const streamingStatus = document.getElementById('streamingStatus');
+            
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
             btn.disabled = true;
+            streamingStatus.classList.remove('hidden');
+            streamingStatus.innerHTML = '📡 Iniciando búsqueda...';
+            document.getElementById('stats').innerText = 'BUSCANDO...';
+            document.getElementById('resultadosCount').innerText = '0';
+            document.getElementById('btnAnalizarIA').classList.add('hidden');
+            
+            busquedaEnCurso = true;
             
             try {
-                const res = await fetch('/search_places', { 
-                    method: 'POST', 
-                    headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify({zona: zonaInput}) 
+                const response = await fetch('/search_places_stream', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({zona: zonaInput})
                 });
                 
-                const data = await res.json();
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
                 
-                if (data.success === false) {
-                    mostrarNotificacion(`❌ ${data.error || 'Error en la búsqueda'}`, 'error');
-                    leads = [];
-                    renderTable();
-                    document.getElementById('stats').innerText = 'ERROR';
-                    document.getElementById('btnAnalizarIA').classList.add('hidden');
-                    document.getElementById('resultadosCount').innerText = '0';
-                } else {
-                    leads = data.leads || []; 
-                    renderTable();
-                    document.getElementById('stats').innerText = `${leads.length} RESULTADOS`;
-                    document.getElementById('resultadosCount').innerText = leads.length;
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
                     
-                    if (leads.length > 0) {
-                        document.getElementById('btnAnalizarIA').classList.remove('hidden');
-                        mostrarNotificacion(`✅ ${leads.length} comercios encontrados`, 'success');
-                        
-                        setTimeout(() => {
-                            autoRevelarEmails();
-                        }, 1000);
-                    } else {
-                        mostrarNotificacion('⚠️ No se encontraron resultados', 'warning');
-                        document.getElementById('btnAnalizarIA').classList.add('hidden');
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                
+                                switch (data.status) {
+                                    case 'start':
+                                        streamingStatus.innerHTML = `📡 ${data.message}`;
+                                        break;
+                                        
+                                    case 'query':
+                                        streamingStatus.innerHTML = `📡 Probando: "${data.query}"`;
+                                        break;
+                                        
+                                    case 'found':
+                                        streamingStatus.innerHTML = `📡 Encontrados ${data.count} resultados con "${data.query}"`;
+                                        break;
+                                        
+                                    case 'page':
+                                        streamingStatus.innerHTML = `📡 Página ${data.page}: ${data.count} resultados`;
+                                        break;
+                                        
+                                    case 'waiting':
+                                        streamingStatus.innerHTML = `⏳ ${data.message}`;
+                                        break;
+                                        
+                                    case 'processing':
+                                        streamingStatus.innerHTML = `📊 Procesando ${data.total} lugares...`;
+                                        break;
+                                        
+                                    case 'processing_one':
+                                        streamingStatus.innerHTML = `🔍 Procesando ${data.current}/${data.total}: ${data.name}`;
+                                        break;
+                                        
+                                    case 'lead':
+                                        // LLEGÓ UN NUEVO LEAD - agregarlo a la tabla
+                                        leads.push(data.lead);
+                                        renderTable();
+                                        document.getElementById('stats').innerText = `${leads.length} RESULTADOS`;
+                                        document.getElementById('resultadosCount').innerText = leads.length;
+                                        
+                                        // Resaltar la nueva fila
+                                        const newRow = document.getElementById(`row-${leads.length-1}`);
+                                        if (newRow) {
+                                            newRow.classList.add('highlight-new');
+                                            setTimeout(() => newRow.classList.remove('highlight-new'), 1000);
+                                        }
+                                        break;
+                                        
+                                    case 'error':
+                                        mostrarNotificacion(`⚠️ ${data.message}`, 'warning');
+                                        streamingStatus.innerHTML = `⚠️ Error: ${data.message}`;
+                                        break;
+                                        
+                                    case 'complete':
+                                        streamingStatus.innerHTML = `✅ Búsqueda completada: ${data.total} resultados`;
+                                        document.getElementById('stats').innerText = `${data.total} RESULTADOS`;
+                                        document.getElementById('resultadosCount').innerText = data.total;
+                                        
+                                        if (data.total > 0) {
+                                            document.getElementById('btnAnalizarIA').classList.remove('hidden');
+                                            mostrarNotificacion(`✅ ${data.total} comercios encontrados`, 'success');
+                                            
+                                            // Iniciar búsqueda de emails con IA
+                                            setTimeout(() => {
+                                                autoRevelarEmails();
+                                            }, 1000);
+                                        } else {
+                                            mostrarNotificacion('⚠️ No se encontraron resultados', 'warning');
+                                        }
+                                        
+                                        busquedaEnCurso = false;
+                                        btn.innerHTML = '<i class="fa-solid fa-search"></i>';
+                                        btn.disabled = false;
+                                        break;
+                                }
+                            } catch (e) {
+                                console.error('Error parseando streaming:', e);
+                            }
+                        }
                     }
                 }
-                
-            } catch(e) { 
+            } catch (e) {
                 console.error('Error en búsqueda:', e);
                 mostrarNotificacion('❌ Error de conexión con el servidor', 'error');
-                leads = [];
-                renderTable();
-                document.getElementById('stats').innerText = 'ERROR CONEXIÓN';
-                document.getElementById('resultadosCount').innerText = '0';
-            } finally { 
+                streamingStatus.innerHTML = '❌ Error de conexión';
+                busquedaEnCurso = false;
                 btn.innerHTML = '<i class="fa-solid fa-search"></i>';
                 btn.disabled = false;
             }
         }
+
+        // Mantener la función original por si acaso, pero la nueva la reemplaza
+        // La función anterior buscar() ha sido reemplazada por la de arriba
 
         // ========== FUNCIÓN DE DIAGNÓSTICO ==========
         async function verificarAPIKeys() {
