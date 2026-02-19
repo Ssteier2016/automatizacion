@@ -6,6 +6,8 @@ import re
 import requests
 import googlemaps
 import json
+import pickle
+import base64
 import sys
 import logging
 import urllib.parse
@@ -30,6 +32,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+# Clave secreta desde variable de entorno
 app.secret_key = os.environ.get('SECRET_KEY', 'clave-por-defecto-cambiar')
 CORS(app)
 
@@ -37,80 +40,43 @@ app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # ========== CONFIGURACIÓN DESDE VARIABLES DE ENTORNO ==========
+# Configuración OAuth de Gmail
 SCOPES = ['https://www.googleapis.com/auth/gmail.send']
 REDIRECT_URI = os.environ.get('REDIRECT_URI', 'https://yerbamate.onrender.com/oauth2callback')
 
+# Credenciales de Google desde variables de entorno
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET', '')
 GOOGLE_PROJECT_ID = os.environ.get('GOOGLE_PROJECT_ID', 'automatizacion-485503')
 
-# ========== API KEYS - VERSIÓN CON DIAGNÓSTICO ==========
-# Lista de todos los nombres posibles para la clave de Google Maps
-POSIBLES_NOMBRES_MAPS = [
-    'Maps_KEY',
-    'GOOGLE_MAPS_KEY',
-    'GMAPS_API_KEY',
-    'MAPS_KEY',
-    'Google_Maps_Key',
-    'maps_key',
-    'GOOGLE_MAPS_API_KEY'
-]
+# ========== API KEYS ==========
+GOOGLE_MAPS_KEY = (
+    os.environ.get('Maps_KEY') or
+    os.environ.get('GOOGLE_MAPS_KEY') or
+    os.environ.get('GMAPS_API_KEY') or
+    ''
+)
 
-# Probar todos los nombres posibles
-GOOGLE_MAPS_KEY = ''
-for nombre in POSIBLES_NOMBRES_MAPS:
-    valor = os.environ.get(nombre)
-    if valor:
-        GOOGLE_MAPS_KEY = valor
-        logger.info(f"✅ Maps_KEY encontrada con nombre: {nombre}")
-        break
+GEMINI_API_KEY = (
+    os.environ.get('GEMINI_API_KEY') or
+    os.environ.get('GEMINI_KEY') or
+    ''
+)
 
-# Lista de nombres posibles para Gemini
-POSIBLES_NOMBRES_GEMINI = [
-    'GEMINI_API_KEY',
-    'GEMINI_KEY',
-    'gemini_api_key',
-    'GEMINI'
-]
-
-GEMINI_API_KEY = ''
-for nombre in POSIBLES_NOMBRES_GEMINI:
-    valor = os.environ.get(nombre)
-    if valor:
-        GEMINI_API_KEY = valor
-        logger.info(f"✅ GEMINI_API_KEY encontrada con nombre: {nombre}")
-        break
-
-# Logging de diagnóstico completo
+# Logging de configuración
 logger.info("=" * 50)
-logger.info("DIAGNÓSTICO COMPLETO DE VARIABLES DE ENTORNO:")
-logger.info("Todas las variables disponibles (ocultando valores):")
-variables_mostradas = 0
-for key in sorted(os.environ.keys()):
-    # Mostrar solo variables relevantes para no saturar el log
-    if any(term in key.upper() for term in ['KEY', 'MAP', 'GEMINI', 'CLIENT', 'SECRET', 'REDIRECT']):
-        valor = os.environ.get(key, '')
-        if valor:
-            mascara = valor[:4] + '...' + valor[-4:] if len(valor) > 8 else '***'
-            logger.info(f"  📌 {key}: {mascara} (longitud: {len(valor)})")
-        else:
-            logger.info(f"  📌 {key}: [VACÍA]")
-        variables_mostradas += 1
-
-if variables_mostradas == 0:
-    logger.info("  ⚠️ No se encontraron variables de entorno relacionadas con API keys")
-
-logger.info("=" * 50)
-logger.info("RESUMEN FINAL:")
+logger.info("CONFIGURACIÓN DE API KEYS:")
 logger.info(f"📌 Maps_KEY: {'✅ Configurada' if GOOGLE_MAPS_KEY else '❌ NO CONFIGURADA'}")
 logger.info(f"📌 GEMINI_API_KEY: {'✅ Configurada' if GEMINI_API_KEY else '❌ NO CONFIGURADA'}")
 logger.info(f"📌 GMAIL_CLIENT_ID: {'✅ Configurada' if GOOGLE_CLIENT_ID else '❌ NO CONFIGURADA'}")
+logger.info(f"📌 REDIRECT_URI: {REDIRECT_URI}")
 logger.info("=" * 50)
 
 # Inicializar Google Maps client
 try:
     if GOOGLE_MAPS_KEY:
         gmaps = googlemaps.Client(key=GOOGLE_MAPS_KEY, timeout=10)
+        # Test rápido
         try:
             test = gmaps.geocode("Buenos Aires")
             logger.info("✅ Google Maps API funcionando correctamente")
@@ -132,7 +98,7 @@ def validar_email(email):
     patron = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return bool(re.match(patron, email))
 
-def scraping_profundo_contacto(url_base, usar_ia=False):
+def scraping_profundo_contacto(url_base, exhaustivo=False):
     """Busca emails y redes sociales con timeout corto."""
     info = {"email": "", "facebook": "", "instagram": ""}
     if not url_base or not url_base.startswith('http'):
@@ -254,7 +220,6 @@ def connect_gmail():
         )
         
         session['state'] = state
-        logger.info(f"Redirigiendo a autorización Gmail")
         return redirect(authorization_url)
         
     except Exception as e:
@@ -498,16 +463,16 @@ def get_producto_image():
         return send_file('producto.png', mimetype='image/png')
     return "Archivo producto.png no encontrado", 404
 
-# ========== RUTA DE BÚSQUEDA CON STREAMING ==========
+# ========== NUEVA RUTA DE BÚSQUEDA CON STREAMING (HASTA 40 RESULTADOS) ==========
 @app.route('/search_places_stream', methods=['POST'])
 def search_places_stream():
     """
-    Busca lugares en Google Maps y devuelve resultados en STREAMING.
-    Procesa en LOTES de 5 para evitar timeouts.
+    Busca dietéticas en Google Maps y devuelve resultados en STREAMING.
+    HASTA 40 RESULTADOS - Procesa en lotes de 5 para evitar timeouts.
     """
     data = request.json
     zona = data.get('zona')
-    ultimo_indice = data.get('ultimo_indice', 0)
+    ultimo_indice = data.get('ultimo_indice', 0)  # Para reanudar búsqueda
 
     if not gmaps:
         return jsonify({'success': False, 'error': 'Google Maps no configurado'}), 200
@@ -519,16 +484,21 @@ def search_places_stream():
         yield f"data: {json.dumps({'status': 'start', 'message': f'Iniciando búsqueda en {zona}...'})}\n\n"
 
         try:
-            # Búsqueda inicial
+            # ===== 1. BÚSQUEDA INICIAL CON MÚLTIPLES QUERIES =====
             queries = [
                 f"dietetica en {zona}",
                 f"dietética {zona}",
                 f"health food store {zona}",
-                f"natural products {zona}"
+                f"natural products {zona}",
+                f"tienda natural {zona}",
+                f"alimentos saludables {zona}"
             ]
 
             response = None
             query_usada = ""
+            todos_los_places = []
+
+            # Probar queries hasta encontrar resultados
             for query in queries:
                 yield f"data: {json.dumps({'status': 'query', 'query': query})}\n\n"
                 try:
@@ -540,34 +510,43 @@ def search_places_stream():
                 except Exception as e:
                     yield f"data: {json.dumps({'status': 'error', 'message': f'Error en query: {str(e)[:50]}'})}\n\n"
                     time.sleep(1)
+                    continue
 
             if not response:
                 yield f"data: {json.dumps({'status': 'complete', 'total': 0})}\n\n"
                 return
 
-            # Recolectar resultados
+            # ===== 2. RECOLECTAR RESULTADOS CON PAGINACIÓN (HASTA 40) =====
+            # Primera página
             todos_los_places = response.get('results', [])
+            yield f"data: {json.dumps({'status': 'page', 'page': 1, 'count': len(todos_los_places)})}\n\n"
 
-            # Intentar segunda página
-            if 'next_page_token' in response:
-                yield f"data: {json.dumps({'status': 'waiting', 'message': 'Esperando para siguiente página...'})}\n\n"
+            # Segunda página (si existe)
+            if 'next_page_token' in response and len(todos_los_places) < 40:
+                yield f"data: {json.dumps({'status': 'waiting', 'message': 'Esperando 2 segundos para siguiente página...'})}\n\n"
                 time.sleep(2)
                 try:
                     response2 = gmaps.places(
                         query=query_usada,
                         page_token=response['next_page_token']
                     )
-                    todos_los_places.extend(response2.get('results', []))
-                    yield f"data: {json.dumps({'status': 'page', 'page': 2, 'count': len(response2.get('results', []))})}\n\n"
+                    page2_results = response2.get('results', [])
+                    todos_los_places.extend(page2_results)
+                    yield f"data: {json.dumps({'status': 'page', 'page': 2, 'count': len(page2_results)})}\n\n"
                 except Exception as e:
                     yield f"data: {json.dumps({'status': 'error', 'message': f'Error en página 2: {str(e)[:50]}'})}\n\n"
 
+            # Limitar a máximo 40 resultados
+            todos_los_places = todos_los_places[:40]
             total_places = len(todos_los_places)
+            
             yield f"data: {json.dumps({'status': 'processing', 'total': total_places})}\n\n"
 
-            # Procesar en lotes de 5
+            # ===== 3. PROCESAR EN LOTES DE 5 =====
             BATCH_SIZE = 5
-            for batch_start in range(0, total_places, BATCH_SIZE):
+            procesados = 0
+            
+            for batch_start in range(ultimo_indice, total_places, BATCH_SIZE):
                 batch_end = min(batch_start + BATCH_SIZE, total_places)
                 yield f"data: {json.dumps({'status': 'batch', 'start': batch_start+1, 'end': batch_end})}\n\n"
 
@@ -577,67 +556,103 @@ def search_places_stream():
                         nombre_actual = p.get('name', 'Sin nombre')
                         yield f"data: {json.dumps({'status': 'processing_one', 'current': idx+1, 'total': total_places, 'name': nombre_actual})}\n\n"
 
+                        # Obtener detalles del lugar
                         det = gmaps.place(
-                            place_id=p['place_id'],
+                            place_id=p['place_id'], 
                             fields=['name', 'formatted_address', 'formatted_phone_number', 'website']
                         )['result']
-
+                        
+                        # Procesar teléfono
                         tel_raw = det.get('formatted_phone_number', '')
                         tel_clean = re.sub(r'\D', '', tel_raw)
-                        if tel_clean and not tel_clean.startswith('54'):
-                            tel_clean = '54' + tel_clean
-
+                        
+                        if tel_clean:
+                            if tel_clean.startswith('549'):
+                                tel_clean = tel_clean
+                            elif tel_clean.startswith('54'):
+                                tel_clean = tel_clean
+                            elif tel_clean.startswith('0'):
+                                tel_clean = '54' + tel_clean[1:]
+                            else:
+                                tel_clean = '54' + tel_clean
+                        
+                        # Scraping para email y redes
                         web = det.get('website', '')
-                        contacto = scraping_profundo_contacto(web) if web else {}
+                        contacto = {"email": "", "facebook": "", "instagram": ""}
+                        
+                        if web:
+                            try:
+                                contacto = scraping_profundo_contacto(web, False)
+                            except:
+                                pass
 
                         lead = {
                             'nombre': det.get('name', 'Sin nombre'),
                             'direccion': det.get('formatted_address', 'Sin dirección'),
                             'telefono': tel_clean[:15] if tel_clean else '',
                             'tel_display': tel_raw[:20] if tel_raw else 'No disponible',
-                            'email': contacto.get("email", ''),
-                            'facebook': contacto.get("facebook", ''),
-                            'instagram': contacto.get("instagram", ''),
+                            'email': contacto["email"] or '',
+                            'facebook': contacto["facebook"] or '',
+                            'instagram': contacto["instagram"] or '',
                             'web': web or ''
                         }
 
+                        # Enviar lead al frontend
                         yield f"data: {json.dumps({'status': 'lead', 'lead': lead, 'index': idx})}\n\n"
+                        procesados += 1
+
+                        # Pequeña pausa entre lugares
                         time.sleep(0.3)
 
                     except Exception as e:
                         logger.error(f"Error procesando lugar: {e}")
                         nombre_lugar = p.get("name", "lugar")
                         yield f"data: {json.dumps({'status': 'error', 'message': f'Error en {nombre_lugar}: {str(e)[:50]}', 'failed_index': idx})}\n\n"
+                        # Continuamos con el siguiente
 
+                # Pausa entre lotes para evitar timeout
                 if batch_end < total_places:
                     yield f"data: {json.dumps({'status': 'pause', 'message': 'Pausa para evitar timeout...'})}\n\n"
                     time.sleep(2)
 
-            yield f"data: {json.dumps({'status': 'complete', 'total': total_places})}\n\n"
+            # ===== 4. FINALIZAR =====
+            yield f"data: {json.dumps({'status': 'complete', 'total': procesados})}\n\n"
+            logger.info(f"✅ Búsqueda completada: {procesados} resultados")
 
         except Exception as e:
-            logger.error(f"Error general: {e}")
-            yield f"data: {json.dumps({'status': 'fatal_error', 'message': f'Error general: {str(e)[:50]}'})}\n\n"
+            logger.error(f"Error general en búsqueda: {e}")
+            yield f"data: {json.dumps({'status': 'fatal_error', 'message': f'Error general: {str(e)[:50]}', 'last_index': idx if 'idx' in locals() else 0})}\n\n"
 
     response = Response(stream_with_context(generate()), mimetype='text/event-stream')
     response.headers['X-Accel-Buffering'] = 'no'
     response.headers['Cache-Control'] = 'no-cache'
     return response
 
-# ========== RUTA DE BÚSQUEDA ORIGINAL ==========
+# ========== RUTA DE BÚSQUEDA ORIGINAL (para compatibilidad) ==========
 @app.route('/search_places', methods=['POST'])
 def search_places():
-    """Versión simple para compatibilidad."""
+    """Versión original que devuelve 10 resultados."""
     data = request.json
     zona = data.get('zona')
     
     if not gmaps:
-        return jsonify({'success': False, 'error': 'Google Maps no configurado', 'leads': []}), 200
+        logger.error("Google Maps client no inicializado")
+        return jsonify({
+            'success': False, 
+            'error': 'Google Maps no configurado',
+            'leads': []
+        }), 200
     
     if not zona:
-        return jsonify({'success': False, 'error': 'Zona no especificada', 'leads': []}), 200
+        return jsonify({
+            'success': False,
+            'error': 'Zona no especificada',
+            'leads': []
+        }), 200
     
     try:
+        logger.info(f"🔍 Buscando dietéticas en: {zona}")
+        
         queries = [
             f"dietetica en {zona}",
             f"dietética {zona}",
@@ -645,20 +660,23 @@ def search_places():
             f"natural products {zona}"
         ]
         
+        leads = []
         response = None
+        
         for query in queries:
             try:
                 response = gmaps.places(query=query)
                 if response.get('results'):
+                    logger.info(f"✅ Encontrados {len(response['results'])} con: '{query}'")
                     break
-            except:
+            except Exception as e:
+                logger.debug(f"Error con query '{query}': {e}")
                 continue
         
         if not response:
             return jsonify({'success': True, 'leads': [], 'total': 0}), 200
         
         results = response.get('results', [])[:10]
-        leads = []
         
         for p in results:
             try:
@@ -670,20 +688,33 @@ def search_places():
                 tel_raw = det.get('formatted_phone_number', '')
                 tel_clean = re.sub(r'\D', '', tel_raw)
                 
-                if tel_clean and not tel_clean.startswith('54'):
-                    tel_clean = '54' + tel_clean
+                if tel_clean:
+                    if tel_clean.startswith('549'):
+                        tel_clean = tel_clean
+                    elif tel_clean.startswith('54'):
+                        tel_clean = tel_clean
+                    elif tel_clean.startswith('0'):
+                        tel_clean = '54' + tel_clean[1:]
+                    else:
+                        tel_clean = '54' + tel_clean
                 
                 web = det.get('website', '')
-                contacto = scraping_profundo_contacto(web) if web else {}
+                contacto = {"email": "", "facebook": "", "instagram": ""}
+                
+                if web:
+                    try:
+                        contacto = scraping_profundo_contacto(web, False)
+                    except:
+                        pass
 
                 leads.append({
                     'nombre': det.get('name', 'Sin nombre'),
                     'direccion': det.get('formatted_address', 'Sin dirección'),
                     'telefono': tel_clean[:15] if tel_clean else '',
                     'tel_display': tel_raw[:20] if tel_raw else 'No disponible',
-                    'email': contacto.get("email", ''),
-                    'facebook': contacto.get("facebook", ''),
-                    'instagram': contacto.get("instagram", ''),
+                    'email': contacto["email"] or '',
+                    'facebook': contacto["facebook"] or '',
+                    'instagram': contacto["instagram"] or '',
                     'web': web or ''
                 })
                 
@@ -691,11 +722,21 @@ def search_places():
                 logger.error(f"Error procesando lugar: {e}")
                 continue
 
-        return jsonify({'success': True, 'leads': leads, 'total': len(leads)}), 200
+        logger.info(f"✅ Total leads: {len(leads)}")
+        
+        return jsonify({
+            'success': True, 
+            'leads': leads,
+            'total': len(leads)
+        }), 200
         
     except Exception as e:
         logger.error(f"Error en search_places: {e}")
-        return jsonify({'success': False, 'error': f'Error: {str(e)[:50]}', 'leads': []}), 200
+        return jsonify({
+            'success': False,
+            'error': f'Error: {str(e)[:50]}',
+            'leads': []
+        }), 200
 
 # ========== RUTA DE GENERACIÓN CSV ==========
 @app.route('/generate_csv', methods=['POST'])
@@ -708,7 +749,11 @@ def generate_csv():
     csv_path = os.path.join(app.config['UPLOAD_FOLDER'], 'leads_seleccionados.csv')
     df.to_csv(csv_path, index=False, encoding='utf-8-sig')
     
-    return jsonify({'success': True, 'csv_url': '/download_csv', 'total': len(selected)})
+    return jsonify({
+        'success': True,
+        'csv_url': '/download_csv',
+        'total': len(selected)
+    })
 
 @app.route('/download_csv', methods=['GET'])
 def download_csv():
@@ -754,17 +799,21 @@ def ai_query():
         payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
 
     try:
+        logger.info(f"Consultando Gemini API...")
         res = requests.post(url, json=payload, timeout=timeout)
         
         if res.status_code == 200:
             result = res.json()
             if 'candidates' in result and len(result['candidates']) > 0:
                 text = result['candidates'][0]['content']['parts'][0]['text']
+                logger.info("✅ Respuesta recibida de Gemini")
                 return jsonify({'text': text})
         
+        logger.warning(f"Gemini respondió con {res.status_code}")
         return jsonify({'text': default_response})
         
     except Exception as e:
+        logger.error(f"Error en ai_query: {e}")
         return jsonify({'text': default_response})
 
 # ========== RUTA DE DIAGNÓSTICO ==========
@@ -781,13 +830,15 @@ def debug_keys():
         'timestamp': time.time()
     })
 
-# ========== HEALTH CHECK ==========
+# ========== RUTA DE HEALTH CHECK ==========
 @app.route('/health', methods=['GET'])
 def health():
     """Health check para Render."""
     return jsonify({
         'status': 'healthy',
-        'gmaps': 'ok' if gmaps else 'error'
+        'gmaps': 'ok' if gmaps else 'error',
+        'gemini': 'ok' if GEMINI_API_KEY else 'missing',
+        'gmail_config': 'ok' if (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET) else 'missing'
     }), 200
 
 if __name__ == '__main__':
