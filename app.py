@@ -40,8 +40,11 @@ CORS(app)
 app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# ========== VARIABLE GLOBAL PARA CONTROLAR DETENCIÓN DE BÚSQUEDAS ==========
+# ========== VARIABLES GLOBALES PARA CONTROL DE BÚSQUEDA ==========
 busqueda_activa = True
+busqueda_guardada = False
+busqueda_pausada = False
+resultados_parciales = []
 
 # ========== CONFIGURACIÓN DESDE VARIABLES DE ENTORNO ==========
 # Configuración OAuth de Gmail
@@ -442,13 +445,13 @@ def extraer_redes_desde_texto(texto):
     
     return redes
 
-def buscar_info_con_ia(nombre, direccion, web_content="", redes=None):
+def buscar_email_y_whatsapp_con_ia(nombre, direccion, web_content="", redes=None):
     """
-    Usa Gemini para buscar email y redes sociales basado en toda la información disponible.
-    Totalmente automático - busca email, Instagram, Facebook y otras redes.
+    Usa Gemini para buscar email y WhatsApp basado en toda la información disponible.
+    Prioriza encontrar email y WhatsApp, las redes sociales son secundarias.
     """
     if not GEMINI_API_KEY:
-        return {"email": "", "instagram": "", "facebook": "", "otras_redes": {}}
+        return {"email": "", "whatsapp": "", "instagram": "", "facebook": "", "otras_redes": {}}
     
     # Verificar si podemos hacer la consulta
     can_request, wait_time = gemini_limiter.can_make_request()
@@ -458,10 +461,10 @@ def buscar_info_con_ia(nombre, direccion, web_content="", redes=None):
             time.sleep(wait_time)
         else:
             logger.warning("❌ Límite diario de Gemini alcanzado")
-            return {"email": "", "instagram": "", "facebook": "", "otras_redes": {}}
+            return {"email": "", "whatsapp": "", "instagram": "", "facebook": "", "otras_redes": {}}
     
-    # Construir prompt detallado para que la IA busque todo
-    prompt = f"""Analiza la siguiente información de un negocio y extrae TODOS los datos de contacto disponibles:
+    # Construir prompt detallado para que la IA busque email y WhatsApp prioritariamente
+    prompt = f"""Analiza la siguiente información de un negocio y extrae los datos de contacto disponibles:
 
 NEGOCIO: {nombre}
 UBICACIÓN: {direccion}
@@ -470,26 +473,33 @@ UBICACIÓN: {direccion}
 
     if web_content:
         # Limitar el contenido web para no exceder tokens
-        web_resumido = web_content[:1000] + "..." if len(web_content) > 1000 else web_content
+        web_resumido = web_content[:1500] + "..." if len(web_content) > 1500 else web_content
         prompt += f"CONTENIDO DEL SITIO WEB:\n{web_resumido}\n\n"
     
     if redes and any(redes.values()):
-        prompt += "REDES SOCIALES ENCONTRADAS EN SCRAPING:\n"
+        prompt += "REDES SOCIALES ENCONTRADAS (debes visitarlas mentalmente para buscar contacto):\n"
         for red, url in redes.items():
             if url:
                 prompt += f"- {red}: {url}\n"
         prompt += "\n"
     
-    prompt += """Basado en TODA esta información, extrae:
+    prompt += """IMPORTANTE: Busca PRIORITARIAMENTE:
 
-1. EMAIL de contacto (para ventas mayoristas o contacto comercial)
-2. INSTAGRAM oficial del negocio
-3. FACEBOOK oficial del negocio
-4. OTRAS REDES SOCIALES (Twitter/X, LinkedIn, TikTok, YouTube, etc.)
+1. EMAIL de contacto (para ventas mayoristas o contacto comercial) - ES LO MÁS IMPORTANTE
+2. WHATSAPP o número de teléfono con código de país (ej: 5491131344552) - SEGUNDO MÁS IMPORTANTE
+3. INSTAGRAM oficial del negocio
+4. FACEBOOK oficial del negocio
+5. OTRAS REDES SOCIALES (Twitter/X, LinkedIn, TikTok, YouTube, etc.)
+
+Para encontrar el WhatsApp:
+- Busca números de teléfono en el sitio web
+- Si encuentras un número argentino, conviértelo a formato internacional (549 + código de área sin 15 + número)
+- Ejemplo: 11 3134-4552 → 5491131344552
 
 Responde SOLO en formato JSON con esta estructura exacta:
 {
     "email": "email encontrado o vacío",
+    "whatsapp": "número de whatsapp encontrado o vacío (formato 549...)",
     "instagram": "url de instagram o vacío", 
     "facebook": "url de facebook o vacío",
     "otras_redes": {
@@ -508,14 +518,14 @@ Si no encuentras algo, déjalo vacío. NO añadas texto adicional, SOLO el JSON.
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.1,  # Baja temperatura para respuestas más precisas
-                "maxOutputTokens": 300
+                "maxOutputTokens": 500
             }
         }
         
         # Registrar la consulta
         gemini_limiter.record_request()
         
-        res = requests.post(url, json=payload, timeout=8)
+        res = requests.post(url, json=payload, timeout=10)
         if res.status_code == 200:
             result = res.json()
             if 'candidates' in result and len(result['candidates']) > 0:
@@ -533,6 +543,7 @@ Si no encuentras algo, déjalo vacío. NO añadas texto adicional, SOLO el JSON.
                     # Validar y limpiar resultados
                     resultado = {
                         "email": data.get("email", ""),
+                        "whatsapp": data.get("whatsapp", ""),
                         "instagram": data.get("instagram", ""),
                         "facebook": data.get("facebook", ""),
                         "otras_redes": data.get("otras_redes", {})
@@ -542,7 +553,11 @@ Si no encuentras algo, déjalo vacío. NO añadas texto adicional, SOLO el JSON.
                     if resultado["email"] and not validar_email(resultado["email"]):
                         resultado["email"] = ""
                     
-                    logger.info(f"✅ IA encontró: Email: {bool(resultado['email'])}, IG: {bool(resultado['instagram'])}, FB: {bool(resultado['facebook'])}")
+                    # Limpiar whatsapp (solo dígitos)
+                    if resultado["whatsapp"]:
+                        resultado["whatsapp"] = re.sub(r'\D', '', resultado["whatsapp"])
+                    
+                    logger.info(f"✅ IA encontró: Email: {bool(resultado['email'])}, WhatsApp: {bool(resultado['whatsapp'])}")
                     return resultado
                     
                 except json.JSONDecodeError:
@@ -553,14 +568,14 @@ Si no encuentras algo, déjalo vacío. NO añadas texto adicional, SOLO el JSON.
     except Exception as e:
         logger.error(f"❌ Error en consulta a IA: {e}")
     
-    return {"email": "", "instagram": "", "facebook": "", "otras_redes": {}}
+    return {"email": "", "whatsapp": "", "instagram": "", "facebook": "", "otras_redes": {}}
 
 def scraping_profundo_contacto(url_base, usar_ia=True, nombre="", direccion=""):
     """
-    Busca emails y redes sociales con timeout corto.
+    Busca emails y teléfonos prioritariamente, luego redes sociales.
     IA automática - siempre busca sin necesidad de clics.
     """
-    info = {"email": "", "facebook": "", "instagram": "", "otras_redes": {}}
+    info = {"email": "", "whatsapp": "", "telefono": "", "facebook": "", "instagram": "", "otras_redes": {}}
     if not url_base or not url_base.startswith('http'):
         return info
     
@@ -574,7 +589,7 @@ def scraping_profundo_contacto(url_base, usar_ia=True, nombre="", direccion=""):
     web_content = ""
     
     try:
-        res = requests.get(url_base, timeout=4, headers=headers, allow_redirects=True)
+        res = requests.get(url_base, timeout=5, headers=headers, allow_redirects=True)
         if res.status_code != 200: 
             return info
         
@@ -598,7 +613,41 @@ def scraping_profundo_contacto(url_base, usar_ia=True, nombre="", direccion=""):
             if info["email"]:
                 break
         
-        # ===== 2. BUSCAR REDES SOCIALES CON BEAUTIFUL SOUP =====
+        # ===== 2. BUSCAR TELÉFONOS (WhatsApp) =====
+        # Patrones para teléfonos argentinos
+        phone_patterns = [
+            r'(\+?549?)?\s*\(?11\)?\s*[0-9]{4,5}\s*-?\s*[0-9]{4,5}',  # Formato argentino
+            r'(\+?54)?\s*\(?[0-9]{2,4}\)?\s*[0-9]{4,5}\s*-?\s*[0-9]{4,5}',  # Otros formatos
+            r'tel[ée]fono["\s:=]+([0-9\s\(\)\+\-]{8,20})',
+            r'whatsapp["\s:=]+([0-9\s\(\)\+\-]{8,20})',
+            r'wsp["\s:=]+([0-9\s\(\)\+\-]{8,20})'
+        ]
+        
+        for pattern in phone_patterns:
+            found_phones = re.findall(pattern, texto_pagina, re.IGNORECASE)
+            for tel in found_phones:
+                if isinstance(tel, tuple):
+                    tel = tel[0]
+                # Limpiar el teléfono
+                tel_clean = re.sub(r'\D', '', tel)
+                if len(tel_clean) >= 10:
+                    # Convertir a formato argentino si es necesario
+                    if tel_clean.startswith('549'):
+                        info["whatsapp"] = tel_clean
+                        info["telefono"] = tel
+                    elif tel_clean.startswith('54'):
+                        info["whatsapp"] = tel_clean
+                        info["telefono"] = tel
+                    elif tel_clean.startswith('11') and len(tel_clean) >= 10:
+                        info["whatsapp"] = '549' + tel_clean
+                        info["telefono"] = tel
+                    else:
+                        info["telefono"] = tel
+                    break
+            if info["whatsapp"] or info["telefono"]:
+                break
+        
+        # ===== 3. BUSCAR REDES SOCIALES CON BEAUTIFUL SOUP =====
         soup = BeautifulSoup(texto_pagina, 'html.parser')
         
         # Buscar enlaces a redes sociales
@@ -635,7 +684,7 @@ def scraping_profundo_contacto(url_base, usar_ia=True, nombre="", direccion=""):
                 url_tiktok = a['href'] if a['href'].startswith('http') else urljoin(url_base, a['href'])
                 info['otras_redes']['tiktok'] = url_tiktok
         
-        # ===== 3. IA AUTOMÁTICA - SIEMPRE BUSCA (sin clics) =====
+        # ===== 4. IA AUTOMÁTICA - SIEMPRE BUSCA (sin clics) =====
         if usar_ia and GEMINI_API_KEY:
             # Pequeña pausa entre consultas a Gemini
             time.sleep(1.5)
@@ -648,17 +697,21 @@ def scraping_profundo_contacto(url_base, usar_ia=True, nombre="", direccion=""):
             if 'otras_redes' in info:
                 redes_encontradas.update(info['otras_redes'])
             
-            # IA busca todo (email, instagram, facebook, otras redes)
-            info_ia = buscar_info_con_ia(
+            # IA busca prioritariamente email y WhatsApp
+            info_ia = buscar_email_y_whatsapp_con_ia(
                 nombre, 
                 direccion, 
                 web_content=web_content[:2000],  # Limitar para no saturar
                 redes=redes_encontradas
             )
             
-            # Combinar resultados (priorizar IA para email, mantener scraping para URLs)
+            # Combinar resultados (priorizar IA para email y WhatsApp)
             if info_ia.get('email') and not info['email']:
                 info['email'] = info_ia['email']
+            
+            if info_ia.get('whatsapp') and not info['whatsapp']:
+                info['whatsapp'] = info_ia['whatsapp']
+                info['telefono'] = info_ia['whatsapp']  # Guardar también como teléfono
             
             # Para redes, combinar: lo que encontró scraping + lo que encontró IA
             if info_ia.get('instagram') and not info.get('instagram'):
@@ -996,25 +1049,53 @@ def get_producto_image():
 @app.route('/stop_search', methods=['POST'])
 def stop_search():
     """Detiene la búsqueda actual."""
-    global busqueda_activa
+    global busqueda_activa, busqueda_pausada, resultados_parciales
     busqueda_activa = False
+    busqueda_pausada = True
     logger.info("🛑 Búsqueda detenida por usuario")
-    return jsonify({'success': True, 'message': 'Búsqueda detenida'})
+    return jsonify({
+        'success': True, 
+        'message': 'Búsqueda detenida',
+        'resultados_parciales': len(resultados_parciales)
+    })
+
+@app.route('/save_search', methods=['POST'])
+def save_search():
+    """Guarda los resultados parciales de la búsqueda."""
+    global busqueda_guardada, resultados_parciales, leads
+    data = request.json
+    guardar = data.get('guardar', False)
+    
+    if guardar:
+        busqueda_guardada = True
+        # Mantener los resultados actuales
+        logger.info(f"💾 Búsqueda guardada con {len(resultados_parciales)} resultados")
+        return jsonify({'success': True, 'message': 'Búsqueda guardada'})
+    else:
+        # Descartar resultados
+        busqueda_guardada = False
+        resultados_parciales = []
+        logger.info("🗑️ Resultados descartados")
+        return jsonify({'success': True, 'message': 'Resultados descartados'})
 
 @app.route('/resume_search', methods=['POST'])
 def resume_search():
     """Reanuda la búsqueda."""
-    global busqueda_activa
+    global busqueda_activa, busqueda_pausada
     busqueda_activa = True
+    busqueda_pausada = False
     logger.info("▶️ Búsqueda reanudada")
     return jsonify({'success': True, 'message': 'Búsqueda reanudada'})
 
 @app.route('/search_status', methods=['GET'])
 def search_status():
     """Devuelve el estado actual de la búsqueda."""
-    global busqueda_activa
+    global busqueda_activa, busqueda_pausada, busqueda_guardada, resultados_parciales
     return jsonify({
         'activa': busqueda_activa,
+        'pausada': busqueda_pausada,
+        'guardada': busqueda_guardada,
+        'resultados_parciales': len(resultados_parciales),
         'gemini': gemini_limiter.get_status(),
         'google_maps': gmaps_limiter.get_status()
     })
@@ -1036,10 +1117,11 @@ def search_places_stream():
     Busca dietéticas en Google Maps y devuelve resultados en STREAMING.
     HASTA 40 RESULTADOS - Procesa en lotes de 5 para evitar timeouts.
     Incluye control de límites de Gemini y Google Maps automático.
-    IA automática - siempre busca sin necesidad de clics.
+    IA automática - siempre busca sin necesidad de clics, priorizando email y WhatsApp.
     """
-    global busqueda_activa
-    busqueda_activa = True  # Activar búsqueda al iniciar
+    global busqueda_activa, busqueda_pausada, resultados_parciales
+    busqueda_activa = True
+    busqueda_pausada = False
     
     data = request.json
     zona = data.get('zona')
@@ -1051,9 +1133,15 @@ def search_places_stream():
         return jsonify({'success': False, 'error': 'Zona no especificada'}), 200
 
     def generate():
-        global busqueda_activa
+        global busqueda_activa, busqueda_pausada, resultados_parciales
         
         yield f"data: {json.dumps({'status': 'start', 'message': f'Iniciando búsqueda en {zona}...'})}\n\n"
+        
+        # Si hay resultados parciales guardados, enviarlos primero
+        if resultados_parciales and busqueda_guardada:
+            for idx, lead in enumerate(resultados_parciales):
+                yield f"data: {json.dumps({'status': 'lead', 'lead': lead, 'index': idx})}\n\n"
+            yield f"data: {json.dumps({'status': 'info', 'message': f'Continuando desde {len(resultados_parciales)} resultados guardados...'})}\n\n"
         
         # Enviar estado inicial de las APIs
         initial_status = {
@@ -1077,7 +1165,7 @@ def search_places_stream():
             
             # Verificar si el usuario detuvo la búsqueda
             if not busqueda_activa:
-                yield f"data: {json.dumps({'status': 'stopped', 'message': '🛑 Búsqueda detenida por usuario'})}\n\n"
+                yield f"data: {json.dumps({'status': 'paused', 'message': '⏸️ Búsqueda pausada'})}\n\n"
                 return
             
             # ===== 2. BÚSQUEDA INICIAL CON MÚLTIPLES QUERIES =====
@@ -1097,7 +1185,7 @@ def search_places_stream():
             for query in queries:
                 # Verificar si el usuario detuvo la búsqueda
                 if not busqueda_activa:
-                    yield f"data: {json.dumps({'status': 'stopped', 'message': '🛑 Búsqueda detenida por usuario'})}\n\n"
+                    yield f"data: {json.dumps({'status': 'paused', 'message': '⏸️ Búsqueda pausada'})}\n\n"
                     return
                 
                 yield f"data: {json.dumps({'status': 'query', 'query': query})}\n\n"
@@ -1136,7 +1224,7 @@ def search_places_stream():
 
             # Verificar si el usuario detuvo la búsqueda
             if not busqueda_activa:
-                yield f"data: {json.dumps({'status': 'stopped', 'message': '🛑 Búsqueda detenida por usuario'})}\n\n"
+                yield f"data: {json.dumps({'status': 'paused', 'message': '⏸️ Búsqueda pausada'})}\n\n"
                 return
 
             # Segunda página (si existe)
@@ -1174,15 +1262,18 @@ def search_places_stream():
 
             # ===== 4. PROCESAR EN LOTES DE 5 =====
             BATCH_SIZE = 5
-            procesados = 0
+            procesados = len(resultados_parciales) if busqueda_guardada else 0
             gemini_consultas_realizadas = 0
             detalles_procesados = 0
             
-            for batch_start in range(0, total_places, BATCH_SIZE):
+            # Determinar desde qué índice empezar si hay resultados guardados
+            start_index = len(resultados_parciales) if busqueda_guardada else 0
+            
+            for batch_start in range(start_index, total_places, BATCH_SIZE):
                 # Verificar si el usuario detuvo la búsqueda
                 if not busqueda_activa:
-                    yield f"data: {json.dumps({'status': 'stopped', 'message': '🛑 Búsqueda detenida por usuario'})}\n\n"
-                    break
+                    yield f"data: {json.dumps({'status': 'paused', 'message': '⏸️ Búsqueda pausada'})}\n\n"
+                    return
                 
                 # Actualizar estado de las APIs
                 api_update = {
@@ -1216,8 +1307,8 @@ def search_places_stream():
                 for idx in range(batch_start, batch_end):
                     # Verificar si el usuario detuvo la búsqueda
                     if not busqueda_activa:
-                        yield f"data: {json.dumps({'status': 'stopped', 'message': '🛑 Búsqueda detenida por usuario'})}\n\n"
-                        break
+                        yield f"data: {json.dumps({'status': 'paused', 'message': '⏸️ Búsqueda pausada'})}\n\n"
+                        return
                     
                     p = todos_los_places[idx]
                     try:
@@ -1245,19 +1336,20 @@ def search_places_stream():
                         tel_raw = det.get('formatted_phone_number', '')
                         tel_clean = re.sub(r'\D', '', tel_raw)
                         
+                        whatsapp = ""
                         if tel_clean:
                             if tel_clean.startswith('549'):
-                                tel_clean = tel_clean
+                                whatsapp = tel_clean
                             elif tel_clean.startswith('54'):
-                                tel_clean = tel_clean
+                                whatsapp = tel_clean
                             elif tel_clean.startswith('0'):
-                                tel_clean = '54' + tel_clean[1:]
+                                whatsapp = '54' + tel_clean[1:]
                             else:
-                                tel_clean = '54' + tel_clean
+                                whatsapp = '54' + tel_clean
                         
-                        # Scraping para email y redes (IA AUTOMÁTICA - siempre busca)
+                        # Scraping para email y WhatsApp (IA AUTOMÁTICA - siempre busca)
                         web = det.get('website', '')
-                        contacto = {"email": "", "facebook": "", "instagram": "", "otras_redes": {}}
+                        contacto = {"email": "", "whatsapp": "", "telefono": "", "facebook": "", "instagram": "", "otras_redes": {}}
                         
                         if web:
                             try:
@@ -1268,7 +1360,7 @@ def search_places_stream():
                                     nombre=det.get('name', ''),
                                     direccion=det.get('formatted_address', '')
                                 )
-                                if contacto.get('email') or contacto.get('instagram') or contacto.get('facebook'):
+                                if contacto.get('email') or contacto.get('whatsapp'):
                                     gemini_consultas_realizadas += 1
                             except Exception as e:
                                 logger.error(f"Error en scraping: {e}")
@@ -1276,14 +1368,18 @@ def search_places_stream():
                         lead = {
                             'nombre': det.get('name', 'Sin nombre'),
                             'direccion': det.get('formatted_address', 'Sin dirección'),
-                            'telefono': tel_clean[:15] if tel_clean else '',
+                            'telefono': whatsapp[:15] if whatsapp else (tel_clean[:15] if tel_clean else ''),
                             'tel_display': tel_raw[:20] if tel_raw else 'No disponible',
+                            'whatsapp': whatsapp,
                             'email': contacto.get('email', ''),
                             'facebook': contacto.get('facebook', ''),
                             'instagram': contacto.get('instagram', ''),
                             'otras_redes': contacto.get('otras_redes', {}),
                             'web': web or ''
                         }
+
+                        # Guardar en resultados parciales
+                        resultados_parciales.append(lead)
 
                         # Enviar lead al frontend
                         yield f"data: {json.dumps({'status': 'lead', 'lead': lead, 'index': idx})}\n\n"
@@ -1305,8 +1401,7 @@ def search_places_stream():
                     
                     # Verificar si debemos continuar después de cada lugar
                     can_detail, _, _ = gmaps_limiter.can_make_detail()
-                    if not can_detail:
-                        yield f"data: {json.dumps({'status': 'warning', 'message': '⚠️ Límite de detalles alcanzado. Deteniendo procesamiento.'})}\n\n"
+                    if not can_detail or not busqueda_activa:
                         break
                 
                 # Verificar si debemos continuar después del lote
@@ -1399,15 +1494,16 @@ def search_places():
                 tel_raw = det.get('formatted_phone_number', '')
                 tel_clean = re.sub(r'\D', '', tel_raw)
                 
+                whatsapp = ""
                 if tel_clean:
                     if tel_clean.startswith('549'):
-                        tel_clean = tel_clean
+                        whatsapp = tel_clean
                     elif tel_clean.startswith('54'):
-                        tel_clean = tel_clean
+                        whatsapp = tel_clean
                     elif tel_clean.startswith('0'):
-                        tel_clean = '54' + tel_clean[1:]
+                        whatsapp = '54' + tel_clean[1:]
                     else:
-                        tel_clean = '54' + tel_clean
+                        whatsapp = '54' + tel_clean
                 
                 web = det.get('website', '')
                 contacto = {"email": "", "facebook": "", "instagram": ""}
@@ -1421,7 +1517,7 @@ def search_places():
                 leads.append({
                     'nombre': det.get('name', 'Sin nombre'),
                     'direccion': det.get('formatted_address', 'Sin dirección'),
-                    'telefono': tel_clean[:15] if tel_clean else '',
+                    'telefono': whatsapp[:15] if whatsapp else (tel_clean[:15] if tel_clean else ''),
                     'tel_display': tel_raw[:20] if tel_raw else 'No disponible',
                     'email': contacto["email"] or '',
                     'facebook': contacto["facebook"] or '',
