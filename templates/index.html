@@ -1,0 +1,1731 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yerba Soberanía - Automatización e IA</title>
+    <!-- Tailwind CSS CDN solo para desarrollo, se puede reemplazar en producción -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* ESTILOS EN LINEA PARA PRODUCCIÓN */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #020617; color: #e2e8f0; font-family: ui-sans-serif, system-ui, sans-serif; overflow: hidden; }
+        .sidebar { background: #0b1120; border-right: 1px solid #1e293b; }
+        .accent-emerald { color: #10b981; }
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+        input[type="checkbox"] { width: 18px; height: 18px; accent-color: #10b981; cursor: pointer; }
+        .sending-row { background-color: rgba(16, 185, 129, 0.15); border-left: 4px solid #10b981; }
+        .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
+        .app-container { height: 100vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .app-password-guide { display: none; background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 15px; margin-top: 8px; font-size: 11px; color: #94a3b8; }
+        .ai-button { background: linear-gradient(135deg, #10b981 0%, #3b82f6 100%); transition: all 0.3s ease; }
+        .ai-button:hover { transform: scale(1.02); filter: brightness(1.1); }
+        .ai-loading { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        
+        /* TUTORIAL EXTENSIVO */
+        .tutorial-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+            display: none;
+        }
+        .tutorial-card-mini {
+            position: absolute;
+            background: rgba(15, 23, 42, 0.98);
+            backdrop-filter: blur(8px);
+            border: 1.5px solid #10b981;
+            border-radius: 16px;
+            padding: 16px 20px;
+            width: 300px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);
+            pointer-events: auto;
+            color: #e2e8f0;
+            font-size: 12px;
+            line-height: 1.5;
+            transition: all 0.3s ease;
+            animation: slideIn 0.4s ease;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .tutorial-arrow {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: #10b981;
+            clip-path: polygon(0% 0%, 100% 50%, 0% 100%);
+        }
+        .tutorial-dots {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            justify-content: center;
+        }
+        .tutorial-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #334155;
+            transition: all 0.2s ease;
+        }
+        .tutorial-dot.active {
+            background: #10b981;
+            transform: scale(1.2);
+        }
+        .tutorial-highlight {
+            position: relative;
+            z-index: 10000 !important;
+            box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.6);
+            border-radius: 12px;
+            transition: box-shadow 0.3s ease;
+            pointer-events: auto !important;
+        }
+        
+        /* EMAIL Y TELÉFONO CLICKEABLES */
+        .clickable-cell {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .clickable-cell:hover {
+            background-color: rgba(16, 185, 129, 0.1);
+        }
+        .clickable-cell.selected {
+            background-color: rgba(16, 185, 129, 0.2);
+            border-left: 3px solid #10b981;
+        }
+        
+        /* DIRECCIÓN PEQUEÑA DEBAJO DEL NOMBRE */
+        .direccion-small {
+            font-size: 8px;
+            color: #94a3b8;
+            display: block;
+            margin-top: 2px;
+            font-style: italic;
+        }
+        
+        /* REDES SOCIALES CLICKEABLES */
+        .social-icon {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .social-icon:hover {
+            transform: scale(1.2);
+            filter: brightness(1.2);
+        }
+        
+        /* IMAGEN EN EL CUERPO DEL EMAIL */
+        .product-image-preview {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            margin: 15px 0;
+            border: 2px solid #1e293b;
+        }
+        
+        /* GUARDAR CLAVE */
+        .saved-key-badge {
+            background: #1e293b;
+            color: #10b981;
+            padding: 4px 8px;
+            border-radius: 20px;
+            font-size: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        /* GUÍA DE VERIFICACIÓN EN 2 PASOS */
+        .guide-card {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 16px;
+            padding: 20px;
+            margin: 10px 0;
+        }
+        .step-number {
+            display: inline-flex;
+            width: 24px;
+            height: 24px;
+            background: #10b981;
+            color: white;
+            border-radius: 50%;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        
+        /* ESTILOS PARA GMAIL */
+        .gmail-status {
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 11px;
+        }
+        .gmail-connected {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid #10b981;
+            color: #10b981;
+        }
+        .gmail-disconnected {
+            background: rgba(245, 158, 11, 0.2);
+            border: 1px solid #f59e0b;
+            color: #f59e0b;
+        }
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+        .btn-success:hover {
+            background: #059669;
+        }
+        .btn-warning {
+            background: #f59e0b;
+            color: white;
+        }
+        .btn-warning:hover {
+            background: #d97706;
+        }
+        .btn-secondary {
+            background: #4b5563;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background: #374151;
+        }
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+    </style>
+</head>
+<body class="bg-[#020617] text-slate-200 font-sans overflow-hidden">
+
+    <div class="app-container flex flex-col lg:flex-row">
+        
+        <!-- SIDEBAR IZQUIERDA -->
+        <aside class="lg:w-96 sidebar p-6 space-y-6 flex flex-col shrink-0 lg:h-screen overflow-y-auto custom-scroll">
+            <div class="flex items-center gap-3">
+                <div class="bg-emerald-600 p-2 rounded-xl">
+                    <i class="fa-solid fa-leaf text-white text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-black tracking-tighter uppercase leading-none italic">Yerba <span class="accent-emerald">Soberanía</span></h1>
+                </div>
+            </div>
+
+            <!-- ESTADO DE GMAIL Y BOTONES -->
+            <div id="gmail-status-container" class="space-y-2"></div>
+            <div id="send-buttons-container" class="space-y-2"></div>
+
+            <!-- 1. BUSCADOR -->
+            <div id="tutorial-step-1" class="space-y-4 pt-4 rounded-2xl transition-all duration-300">
+                <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2">1. Localización</h3>
+                <div class="flex gap-2">
+                    <input type="text" id="zona" placeholder="Ej: Morón, Buenos Aires" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-2xl text-sm outline-none focus:border-emerald-500 transition">
+                    <button onclick="buscar()" id="btnBuscar" class="bg-emerald-600 px-5 rounded-2xl hover:bg-emerald-500 transition">
+                        <i class="fa-solid fa-search"></i>
+                    </button>
+                </div>
+                <button onclick="analizarZonaIA()" id="btnAnalizarIA" class="w-full ai-button text-white font-bold py-2 px-4 rounded-xl text-[10px] uppercase flex items-center justify-center gap-2 hidden">
+                    <span>✨ Analizar Estrategia IA</span>
+                </button>
+            </div>
+
+            <!-- 2. WHATSAPP CONFIG - SIN IMAGEN -->
+            <div id="tutorial-step-2" class="space-y-4 pt-4 rounded-2xl transition-all duration-300">
+                <div class="flex justify-between items-center border-b border-emerald-900/30 pb-2">
+                    <h3 class="text-[10px] font-black text-emerald-500 uppercase tracking-widest">2. WhatsApp Uno por Uno</h3>
+                    <button onclick="generarPitchIA()" id="btnPitchIA" class="text-[9px] font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1">
+                        ✨ Sugerir Texto
+                    </button>
+                </div>
+                <div class="space-y-3">
+                    <select id="waVersion" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-xs outline-none focus:border-emerald-500">
+                        <option value="web">WhatsApp Web (Escritorio)</option>
+                        <option value="app">WhatsApp Mobile (App)</option>
+                    </select>
+
+                    <label class="text-[9px] font-bold text-slate-500 uppercase px-1">
+                        Mensaje ({nombre})
+                    </label>
+                    <textarea id="waBody" rows="3" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-[10px] outline-none focus:border-emerald-500 resize-none transition-all">Hola {nombre}, ¿cómo estás? Te escribo de Yerba Mate Soberanía para enviarte nuestra lista de precios mayorista.</textarea>
+                    
+                    <button onclick="iniciarWhatsAppSecuencial()" id="btnWhatsAppSecuencial" class="w-full bg-emerald-600 text-white font-black py-3 rounded-xl hover:bg-emerald-500 transition flex items-center justify-center gap-2 text-xs uppercase shadow-lg">
+                        <i class="fa-brands fa-whatsapp text-lg"></i> Iniciar Envío Secuencial
+                    </button>
+                    <p class="text-[8px] text-slate-500 italic text-center">Se abrirá una ventana a la vez. Tú aprietas "Enviar" y continúa automáticamente.</p>
+                </div>
+            </div>
+
+            <!-- 3. EMAIL CONFIG - CON GUÍA COMPLETA -->
+            <div id="tutorial-step-3" class="space-y-4 pt-4">
+                <h3 class="text-[10px] font-black text-blue-500 uppercase tracking-widest border-b border-blue-900/30 pb-2">3. Campaña de Emails</h3>
+                
+                <!-- GUÍA COMPLETA DE VERIFICACIÓN EN 2 PASOS Y CONTRASEÑA DE APLICACIÓN -->
+                <div class="guide-card space-y-4">
+                    <div class="flex items-center gap-2 border-b border-slate-700 pb-2">
+                        <i class="fa-solid fa-shield-hal text-emerald-500"></i>
+                        <h4 class="text-[11px] font-black text-white uppercase">GUÍA COMPLETA: Configurar Gmail para Envíos</h4>
+                    </div>
+                    
+                    <!-- PASO 1: VERIFICACIÓN EN 2 PASOS -->
+                    <div class="space-y-2">
+                        <div class="flex items-start">
+                            <span class="step-number">1</span>
+                            <div class="flex-1">
+                                <p class="text-[10px] font-bold text-white">ACTIVAR VERIFICACIÓN EN 2 PASOS</p>
+                                <p class="text-[9px] text-slate-400 mt-1">Requisito OBLIGATORIO para generar contraseña de aplicación.</p>
+                                <ol class="list-decimal list-inside text-[9px] text-slate-300 mt-2 space-y-1.5">
+                                    <li>Ve a <a href="https://myaccount.google.com/security" target="_blank" class="text-emerald-400 underline font-bold">Seguridad de Google</a></li>
+                                    <li>Busca <span class="text-white font-bold">"Verificación en dos pasos"</span> (2FA)</li>
+                                    <li>Haz clic en <span class="text-white font-bold">"Comenzar"</span></li>
+                                    <li>Sigue los pasos con tu teléfono</li>
+                                    <li><span class="text-yellow-400">✅ ¡ACTÍVALA! Es necesaria para el siguiente paso</span></li>
+                                </ol>
+                                <div class="bg-blue-900/30 p-2 rounded-lg mt-2 border border-blue-800/50">
+                                    <p class="text-[8px] text-blue-300 flex items-start gap-1">
+                                        <i class="fa-solid fa-circle-info mt-0.5"></i>
+                                        <span>Sin verificación en 2 pasos, Google NO permite crear contraseñas de aplicación.</span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- PASO 2: GENERAR CONTRASEÑA DE APLICACIÓN -->
+                    <div class="space-y-2 pt-2">
+                        <div class="flex items-start">
+                            <span class="step-number">2</span>
+                            <div class="flex-1">
+                                <p class="text-[10px] font-bold text-white">GENERAR CONTRASEÑA DE APLICACIÓN</p>
+                                <p class="text-[9px] text-slate-400 mt-1">Después de activar 2FA, sigue estos pasos:</p>
+                                <ol class="list-decimal list-inside text-[9px] text-slate-300 mt-2 space-y-1.5">
+                                    <li>Ve a <a href="https://myaccount.google.com/apppasswords" target="_blank" class="text-emerald-400 underline font-bold">App Passwords</a></li>
+                                    <li>Inicia sesión con tu Gmail</li>
+                                    <li>En "Seleccionar aplicación" elige <span class="text-white font-bold">"Correo"</span></li>
+                                    <li>En "Seleccionar dispositivo" elige <span class="text-white font-bold">"Otro"</span></li>
+                                    <li>Escribe: <span class="text-white font-bold bg-slate-800 px-2 py-0.5 rounded">CRM Soberanía</span></li>
+                                    <li>Haz clic en <span class="text-white font-bold">"GENERAR"</span></li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- PASO 3: COPIAR LA CLAVE -->
+                    <div class="space-y-2 pt-2">
+                        <div class="flex items-start">
+                            <span class="step-number">3</span>
+                            <div class="flex-1">
+                                <p class="text-[10px] font-bold text-white">COPIAR LA CLAVE AMARILLA</p>
+                                <p class="text-[9px] text-slate-400 mt-1">Google te mostrará un código de <span class="text-yellow-400 font-bold">16 caracteres en AMARILLO</span></p>
+                                <div class="bg-slate-900 p-3 rounded-lg mt-2 border-2 border-yellow-500/50">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-yellow-400 font-mono text-sm font-bold">xxxx xxxx xxxx xxxx</span>
+                                        <span class="text-[8px] text-slate-400">16 caracteres</span>
+                                    </div>
+                                    <p class="text-[8px] text-slate-400 mt-2 flex items-center gap-1">
+                                        <i class="fa-solid fa-check-circle text-emerald-500"></i>
+                                        PUEDES COPIARLA CON O SIN ESPACIOS - El sistema la limpia automáticamente
+                                    </p>
+                                </div>
+                                <div class="bg-emerald-900/30 p-2 rounded-lg mt-2 border border-emerald-800/50">
+                                    <p class="text-[8px] text-emerald-300 flex items-start gap-1">
+                                        <i class="fa-solid fa-key mt-0.5"></i>
+                                        <span><span class="font-bold">EJEMPLO:</span> "aaaa bbbb cccc dddd" o "aaaabbbbccccdddd" - AMBAS FUNCIONAN</span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- PASO 4: GUARDAR EN CACHÉ -->
+                    <div class="space-y-2 pt-2">
+                        <div class="flex items-start">
+                            <span class="step-number">4</span>
+                            <div class="flex-1">
+                                <p class="text-[10px] font-bold text-white">GUARDAR EN CACHÉ (OPCIONAL)</p>
+                                <p class="text-[9px] text-slate-400 mt-1">Usa el botón "Guardar" para almacenar la clave en tu navegador</p>
+                                <div class="flex items-center gap-2 mt-2">
+                                    <button onclick="guardarClaveEnCache()" class="bg-emerald-600 text-white text-[8px] font-bold px-3 py-1.5 rounded-lg hover:bg-emerald-500 transition flex items-center gap-1">
+                                        <i class="fa-solid fa-save"></i> Guardar clave
+                                    </button>
+                                    <button onclick="cargarClaveGuardada()" class="bg-slate-700 text-white text-[8px] font-bold px-3 py-1.5 rounded-lg hover:bg-slate-600 transition flex items-center gap-1">
+                                        <i class="fa-solid fa-key"></i> Cargar clave
+                                    </button>
+                                </div>
+                                <div id="claveGuardadaInfo" class="hidden mt-2">
+                                    <span class="saved-key-badge">
+                                        <i class="fa-solid fa-check-circle"></i> Clave guardada en caché
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- PASO 5: SOLUCIÓN DE PROBLEMAS -->
+                    <div class="space-y-2 pt-2 border-t border-slate-700 mt-2">
+                        <details class="text-[9px]">
+                            <summary class="text-blue-400 font-bold cursor-pointer hover:text-blue-300">🔧 SOLUCIÓN DE PROBLEMAS - No me acepta la clave</summary>
+                            <div class="mt-2 space-y-2 pl-2">
+                                <p class="text-slate-300">❌ <span class="font-bold text-white">Error de autenticación:</span></p>
+                                <ul class="list-disc list-inside text-slate-400 space-y-1 ml-1">
+                                    <li>¿Activaste verificación en 2 pasos? Es OBLIGATORIA</li>
+                                    <li>¿Copiaste los 16 caracteres exactos?</li>
+                                    <li>¿Tiene espacios? El sistema los elimina, no hay problema</li>
+                                    <li>¿Usaste tu Gmail correcto? Debe ser el mismo donde activaste 2FA</li>
+                                </ul>
+                                <p class="text-slate-300 mt-2">✅ <span class="font-bold text-white">Solución rápida:</span></p>
+                                <ol class="list-decimal list-inside text-slate-400 space-y-1 ml-1">
+                                    <li>Ve a <a href="https://myaccount.google.com/apppasswords" target="_blank" class="text-emerald-400 underline">App Passwords</a></li>
+                                    <li>Revoca todas las contraseñas anteriores</li>
+                                    <li>Genera UNA NUEVA con el nombre "CRM Soberanía"</li>
+                                    <li>Copia los 16 caracteres NUEVOS</li>
+                                    <li>Pégalos arriba (con o sin espacios)</li>
+                                </ol>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+                
+                <!-- FORMULARIO DE EMAIL -->
+                <div class="space-y-3 mt-4">
+                    <input type="email" id="emailUser" placeholder="Tu Gmail (ejemplo@gmail.com)" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-[10px] outline-none focus:border-blue-500">
+                    
+                    <div class="space-y-1">
+                        <div class="flex justify-between items-center px-1">
+                            <label class="text-[9px] font-bold text-slate-500 uppercase">Clave de Aplicación (16 caracteres)</label>
+                            <div id="claveEstado" class="text-[8px] text-slate-500">
+                                <span id="claveLongitud">0/16</span> caracteres
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <input type="password" id="emailPass" placeholder="Pega tu clave aquí (con o sin espacios)" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-[10px] outline-none focus:border-blue-500" oninput="validarClave()">
+                        </div>
+                        <div id="claveValidacion" class="text-[8px] mt-1"></div>
+                    </div>
+
+                    <label class="text-[9px] font-bold text-slate-500 uppercase px-1 flex justify-between">
+                        <span>Cuerpo del Email</span>
+                        <span class="text-emerald-500">✅ Se adjuntará producto.png</span>
+                    </label>
+                    <textarea id="emailBody" rows="12" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-[10px] outline-none focus:border-blue-500 resize-none transition-all">Hola, buen día:
+
+Mi nombre es Juan Ignacio Lewczuk y me comunico con {nombre} ubicado en {direccion} para ofrecerles Yerba Mate Soberanía para venta por mayor en dietéticas y comercios naturales.
+
+Trabajamos con una yerba de origen misionero, de excelente calidad, estacionada, con muy buena aceptación por parte de los consumidores que buscan un producto tradicional y confiable.
+
+Ofrecemos:
+- Precios mayoristas competitivos
+- Abastecimiento constante
+- Formatos ideales para dietéticas
+- Posibilidad de compras recurrentes
+
+Adjunto imagen de nuestro producto para que conozcas su presentación.
+
+Quedo a disposición para enviarles lista de precios, condiciones de venta o coordinar un primer pedido de prueba.
+
+Muchas gracias por su tiempo.
+
+Saludos cordiales,
+Juan Ignacio Lewczuk
+📱 WhatsApp: 11 3134-4552
+✉️ Email: lewczukjuani@gmail.com</textarea>
+
+                    <!-- VISTA PREVIA DE LA IMAGEN -->
+                    <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-700">
+                        <p class="text-[9px] text-slate-400 mb-2">📸 Vista previa del adjunto:</p>
+                        <img id="productImagePreview" src="/producto.png" alt="Producto Soberanía" class="product-image-preview max-h-[100px]" onerror="this.style.display='none'">
+                        <p class="text-[8px] text-slate-500 mt-1">* La imagen se adjuntará automáticamente al email</p>
+                    </div>
+
+                    <!-- BOTÓN DE CAMPAÑA -->
+                    <button onclick="iniciarCampanaEmails()" id="btnCampanaEmails" class="w-full bg-blue-600 text-white font-black py-4 rounded-xl hover:bg-blue-500 transition flex items-center justify-center gap-2 text-xs uppercase shadow-lg">
+                        <i class="fa-solid fa-envelope"></i> ENVIAR CAMPAÑA DE EMAILS (SMTP)
+                    </button>
+                    <p class="text-[8px] text-slate-500 italic text-center">Se enviarán SOLO a los emails seleccionados (haz clic en el email)</p>
+                </div>
+            </div>
+            
+            <!-- BOTÓN DE AYUDA / TUTORIAL -->
+            <div class="pt-4 border-t border-slate-800 mt-4">
+                <button onclick="iniciarTutorial()" class="w-full bg-slate-800 text-white font-bold py-2 rounded-xl text-[9px] uppercase hover:bg-slate-700 transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-question-circle"></i> GUÍA INTERACTIVA
+                </button>
+            </div>
+        </aside>
+
+        <!-- PANEL DE RESULTADOS -->
+        <main class="flex-1 p-4 lg:p-8 flex flex-col overflow-visible">
+            <div class="bg-[#0b1120] rounded-[2rem] border border-slate-800 shadow-2xl flex flex-col flex-1 min-h-[500px]">
+                <div class="px-8 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/40 sticky top-0 z-10 rounded-t-[2rem]">
+                    <div id="tutorial-step-4" class="flex items-center gap-4 rounded-xl p-1 transition-all duration-300">
+                        <input type="checkbox" id="selectAll" onclick="toggleAll()">
+                        <h2 class="text-xs font-bold uppercase tracking-widest text-slate-400">Resultados</h2>
+                    </div>
+                    <div id="stats" class="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Listo</div>
+                </div>
+
+                <div class="overflow-x-auto overflow-y-visible">
+                    <table class="w-full text-[11px] text-left min-w-[800px]">
+                        <thead class="bg-slate-900/80 text-[9px] uppercase text-slate-500 font-black sticky top-0">
+                            <tr>
+                                <th class="px-6 py-4 w-10 text-center">Sel</th>
+                                <th class="px-6 py-4">Comercio / Dirección</th>
+                                <th class="px-6 py-4 text-center">WhatsApp</th>
+                                <th id="tutorial-step-5" class="px-6 py-4">Email (CLICK PARA ENVIAR)</th>
+                                <th class="px-6 py-4 text-center">Redes</th>
+                                <th class="px-6 py-4 text-center">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leadsTable" class="divide-y divide-slate-800/50">
+                            <tr><td colspan="6" class="py-20 text-center text-slate-700 italic">Busca una zona para ver resultados...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL IA ✨ -->
+    <div id="aiModal" class="modal flex items-center justify-center p-6" style="display: none;">
+        <div class="bg-slate-900 border border-slate-700 w-full max-w-lg p-8 rounded-[2.5rem] shadow-2xl space-y-6">
+            <div class="flex items-center gap-3 border-b border-slate-800 pb-3">
+                <i class="fa-solid fa-sparkles text-blue-500 text-2xl"></i>
+                <h2 class="text-lg font-black text-white uppercase italic">IA Soberanía ✨</h2>
+            </div>
+            <div id="aiResponseContent" class="text-xs text-slate-300 leading-relaxed overflow-y-auto max-h-[300px] custom-scroll whitespace-pre-wrap">
+                Analizando...
+            </div>
+            <button onclick="cerrarAIModal()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl text-[10px] uppercase hover:bg-slate-700 transition">Cerrar</button>
+        </div>
+    </div>
+
+    <!-- MODAL WHATSAPP SECUENCIAL -->
+    <div id="waModal" class="modal flex items-center justify-center p-6" style="display: none;">
+        <div class="bg-slate-900 border border-slate-700 w-full max-w-sm p-8 rounded-[2.5rem] shadow-2xl text-center space-y-5">
+            <i class="fa-brands fa-whatsapp text-emerald-500 text-5xl"></i>
+            <div>
+                <h2 id="modalTitle" class="text-lg font-black text-white uppercase italic">Enviando WhatsApp...</h2>
+                <p id="modalProgress" class="text-[10px] text-slate-400 mt-1">Preparando chat</p>
+                <p id="modalInstructions" class="text-[9px] text-emerald-400 mt-2">1. Aparecerá una ventana de WhatsApp<br>2. TÚ debes presionar ENVIAR<br>3. La ventana se reciclará automáticamente</p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="cerrarModalWA()" class="flex-1 bg-slate-800 text-slate-400 font-bold py-3 rounded-xl text-[10px] uppercase hover:bg-slate-700 transition">Detener</button>
+                <button onclick="abrirSiguienteWASecuencial()" id="btnSiguienteWA" class="flex-1 bg-emerald-600 text-white font-black py-3 rounded-xl text-[10px] uppercase shadow-lg hover:bg-emerald-500 transition">
+                    <i class="fa-brands fa-whatsapp"></i> Abrir Chat
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL PROGRESO EMAILS (SMTP) -->
+    <div id="emailProgressModal" class="modal flex items-center justify-center p-6" style="display: none;">
+        <div class="bg-slate-900 border border-blue-600 w-full max-w-lg p-8 rounded-[2.5rem] shadow-2xl space-y-6">
+            <div class="flex items-center gap-3 border-b border-slate-800 pb-3">
+                <i class="fa-solid fa-envelope-circle-check text-blue-500 text-2xl"></i>
+                <h2 class="text-lg font-black text-white uppercase italic">Enviando Emails (SMTP)</h2>
+            </div>
+            <div id="emailProgressContent" class="text-xs text-slate-300 leading-relaxed overflow-y-auto max-h-[300px] custom-scroll whitespace-pre-wrap">
+                Iniciando campaña de emails...
+            </div>
+            <div id="emailProgressBar" class="w-full bg-slate-800 rounded-full h-2.5">
+                <div id="emailProgressFill" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%;"></div>
+            </div>
+            <p id="emailProgressText" class="text-[9px] text-slate-400 text-center">0% completado</p>
+            <button onclick="cerrarEmailModal()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl text-[10px] uppercase hover:bg-slate-700 transition">Cerrar</button>
+        </div>
+    </div>
+
+    <!-- MODAL PROGRESO GMAIL API -->
+    <div id="gmailProgressModal" class="modal flex items-center justify-center p-6" style="display: none;">
+        <div class="bg-slate-900 border border-emerald-600 w-full max-w-lg p-8 rounded-[2.5rem] shadow-2xl space-y-6">
+            <div class="flex items-center gap-3 border-b border-slate-800 pb-3">
+                <i class="fa-brands fa-google text-emerald-500 text-2xl"></i>
+                <h2 class="text-lg font-black text-white uppercase italic">Enviando con Gmail API</h2>
+            </div>
+            <div id="gmailProgressContent" class="text-xs text-slate-300 leading-relaxed overflow-y-auto max-h-[300px] custom-scroll whitespace-pre-wrap">
+                Iniciando envío automático...
+            </div>
+            <div id="gmailProgressBar" class="w-full bg-slate-800 rounded-full h-2.5">
+                <div id="gmailProgressFill" class="bg-emerald-600 h-2.5 rounded-full" style="width: 0%;"></div>
+            </div>
+            <p id="gmailProgressText" class="text-[9px] text-slate-400 text-center">0% completado</p>
+            <button onclick="cerrarGmailModal()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl text-[10px] uppercase hover:bg-slate-700 transition">Cerrar</button>
+        </div>
+    </div>
+
+    <!-- TUTORIAL EXTENSIVO -->
+    <div id="tutorialOverlay" class="tutorial-overlay"></div>
+
+    <script>
+        // ========== VARIABLES GLOBALES ==========
+        let leads = []; 
+        let waCola = []; 
+        let waCursor = 0;
+        let waWindow = null;
+        let revelandoEmails = false;
+        let abortControllers = [];
+        let pausaIA = 5000; // 5 segundos entre peticiones a IA
+        
+        // VARIABLES PARA GMAIL
+        let gmailAuthorized = false;
+
+        // VARIABLES PARA TUTORIAL
+        let tutorialActivo = false;
+        let tutorialPaso = 0;
+        const tutorialPasos = [
+            {
+                elemento: 'tutorial-step-1',
+                titulo: '🔍 PASO 1: BUSCAR COMERCIOS',
+                texto: 'Ingresa una zona (ej: "Morón, Buenos Aires") y presiona el botón de búsqueda. El sistema encontrará dietéticas y comercios naturales.',
+                posicion: 'right'
+            },
+            {
+                elemento: 'btnAnalizarIA',
+                titulo: '✨ PASO 2: ANÁLISIS CON IA',
+                texto: 'Después de la búsqueda, aparecerá este botón. La IA analizará los comercios y te dará consejos de venta personalizados.',
+                posicion: 'right'
+            },
+            {
+                elemento: 'tutorial-step-2',
+                titulo: '📱 PASO 3: WHATSAPP SECUENCIAL',
+                texto: 'Selecciona los comercios y haz clic aquí. Se abrirá UNA ventana de WhatsApp a la vez con el mensaje pre-escrito.',
+                posicion: 'right'
+            },
+            {
+                elemento: 'tutorial-step-3',
+                titulo: '📧 PASO 4: CONFIGURAR EMAIL',
+                texto: 'Sigue la GUÍA COMPLETA para activar verificación en 2 pasos y generar tu contraseña de aplicación de 16 caracteres.',
+                posicion: 'right'
+            },
+            {
+                elemento: 'tutorial-step-5',
+                titulo: '✅ PASO 5: ENVIAR EMAILS INDIVIDUALES',
+                texto: 'HAZ CLIC sobre el email del comercio para abrir tu cliente de correo y enviar un email individual con la imagen adjunta.',
+                posicion: 'bottom'
+            },
+            {
+                elemento: 'btnCampanaEmails',
+                titulo: '🚀 PASO 6: CAMPAÑA MASIVA',
+                texto: 'Presiona este botón para enviar emails AUTOMÁTICAMENTE a TODOS los seleccionados usando Gmail y tu contraseña de aplicación.',
+                posicion: 'right'
+            }
+        ];
+
+        // ========== FUNCIONES DE GMAIL API ==========
+        function checkGmailAuth() {
+            fetch('/check_gmail_auth')
+                .then(res => res.json())
+                .then(data => {
+                    gmailAuthorized = data.authenticated;
+                    updateGmailUI();
+                })
+                .catch(error => console.error('Error verificando autenticación:', error));
+        }
+
+        function updateGmailUI() {
+            const container = document.getElementById('gmail-status-container');
+            const buttonsContainer = document.getElementById('send-buttons-container');
+            
+            if (gmailAuthorized) {
+                container.innerHTML = `
+                    <div class="gmail-status gmail-connected">
+                        <i class="fa-solid fa-check-circle"></i> 
+                        <strong>✅ Gmail Conectado</strong> - Puedes enviar emails automáticamente
+                    </div>
+                `;
+                buttonsContainer.innerHTML = `
+                    <div class="btn-group">
+                        <button onclick="enviarCampanhaGmail()" class="btn btn-success">
+                            <i class="fa-brands fa-google"></i> Enviar con Gmail (Automático)
+                        </button>
+                        <button onclick="logoutGmail()" class="btn btn-danger">
+                            <i class="fa-solid fa-sign-out-alt"></i> Desconectar
+                        </button>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <div class="gmail-status gmail-disconnected">
+                        <i class="fa-solid fa-exclamation-triangle"></i> 
+                        <strong>⚠️ Gmail no conectado</strong> - Conecta para envío automático
+                    </div>
+                `;
+                buttonsContainer.innerHTML = `
+                    <div class="btn-group">
+                        <a href="/connect_gmail" target="_blank" class="btn btn-warning">
+                            <i class="fa-solid fa-plug"></i> Conectar Gmail
+                        </a>
+                    </div>
+                `;
+            }
+        }
+
+        function logoutGmail() {
+            fetch('/logout_gmail', {method: 'POST'})
+                .then(() => {
+                    gmailAuthorized = false;
+                    updateGmailUI();
+                    mostrarNotificacion('Gmail desconectado', 'success');
+                });
+        }
+
+        function enviarCampanhaGmail() {
+            const selectedLeads = obtenerLeadsSeleccionados();
+            const subject = document.getElementById('emailUser').value ? 
+                'Oferta Mayorista - Yerba Mate Soberanía' : 
+                document.getElementById('subject')?.value || 'Oferta Mayorista - Yerba Mate Soberanía';
+            const body = document.getElementById('emailBody').value;
+            const attachImage = true; // Siempre adjuntar imagen
+            
+            if (selectedLeads.length === 0) {
+                mostrarNotificacion('Selecciona al menos un lead', 'error');
+                return;
+            }
+            
+            if (!gmailAuthorized) {
+                mostrarNotificacion('Primero conecta tu cuenta de Gmail', 'warning');
+                window.open('/connect_gmail', '_blank');
+                return;
+            }
+            
+            // Mostrar modal de progreso
+            const modal = document.getElementById('gmailProgressModal');
+            const content = document.getElementById('gmailProgressContent');
+            const progressFill = document.getElementById('gmailProgressFill');
+            const progressText = document.getElementById('gmailProgressText');
+            
+            modal.style.display = 'flex';
+            content.innerHTML = '🚀 INICIANDO ENVÍO CON GMAIL API...\n\n';
+            content.innerHTML += `📧 Destinatarios: ${selectedLeads.length}\n`;
+            content.innerHTML += `📎 Adjunto: producto.png\n`;
+            content.innerHTML += `⏳ Enviando emails automáticamente...\n\n`;
+            
+            progressFill.style.width = '0%';
+            progressText.innerText = '0% completado';
+            
+            // Preparar datos para envío
+            const leadsConIndice = selectedLeads.map((lead, index) => ({
+                ...lead,
+                original_index: index
+            }));
+            
+            // Enviar petición
+            fetch('/send_bulk_emails_gmail', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    leads: leadsConIndice,
+                    subject: subject,
+                    body: body,
+                    attach_image: attachImage
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let emailsProcesados = 0;
+                let emailsExitosos = 0;
+                let emailsFallidos = 0;
+                
+                function readStream() {
+                    reader.read().then(({ done, value }) => {
+                        if (done) {
+                            content.innerHTML += '\n✅ PROCESO COMPLETADO\n';
+                            content.innerHTML += `✅ Exitosos: ${emailsExitosos}\n`;
+                            content.innerHTML += `❌ Fallidos: ${emailsFallidos}\n`;
+                            progressFill.style.width = '100%';
+                            progressText.innerText = '100% completado';
+                            mostrarNotificacion('✅ Envío con Gmail completado', 'success');
+                            return;
+                        }
+                        
+                        const text = decoder.decode(value);
+                        const lines = text.split('\n');
+                        
+                        lines.forEach(line => {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.slice(6));
+                                    
+                                    if (data.status === 'start') {
+                                        content.innerHTML += `📊 Total a enviar: ${data.total}\n\n`;
+                                    }
+                                    else if (data.status === 'finished') {
+                                        content.innerHTML += '\n✅ CAMPAÑA FINALIZADA\n';
+                                    }
+                                    else if (data.status === 'error') {
+                                        content.innerHTML += `\n❌ ERROR: ${data.error}\n`;
+                                    }
+                                    else if (data.progress !== undefined) {
+                                        emailsProcesados++;
+                                        if (data.success) emailsExitosos++; else emailsFallidos++;
+                                        
+                                        const row = document.getElementById(`status-${data.index}`);
+                                        if(row) {
+                                            row.innerHTML = `<span class="text-[9px] ${data.success ? 'text-green-500' : 'text-red-500'} font-black uppercase">${data.msg}</span>`;
+                                        }
+                                        
+                                        const porcentaje = Math.round((emailsProcesados / selectedLeads.length) * 100);
+                                        progressFill.style.width = `${porcentaje}%`;
+                                        progressText.innerText = `${porcentaje}% completado`;
+                                        
+                                        content.innerHTML += `${emailsProcesados}/${selectedLeads.length}: ${data.success ? '✅' : '❌'} ${leads[data.index]?.nombre || ''} - ${data.msg}\n`;
+                                        
+                                        const contentDiv = document.getElementById('gmailProgressContent');
+                                        contentDiv.scrollTop = contentDiv.scrollHeight;
+                                    }
+                                } catch (e) {
+                                    console.error('Error parseando SSE:', e);
+                                }
+                            }
+                        });
+                        
+                        readStream();
+                    }).catch(error => {
+                        console.error('Error leyendo stream:', error);
+                        content.innerHTML += `\n❌ Error: ${error}\n`;
+                    });
+                }
+                
+                readStream();
+            })
+            .catch(error => {
+                content.innerHTML += `\n❌ Error en la petición: ${error}\n`;
+                mostrarNotificacion('❌ Error al enviar con Gmail', 'error');
+            });
+        }
+
+        function cerrarGmailModal() {
+            document.getElementById('gmailProgressModal').style.display = 'none';
+        }
+
+        function obtenerLeadsSeleccionados() {
+            const selected = [];
+            document.querySelectorAll('.lead-check:checked').forEach(c => {
+                const idx = parseInt(c.dataset.index);
+                if (leads[idx] && leads[idx].email && leads[idx].email !== '-' && leads[idx].email !== '---' && leads[idx].email !== '') {
+                    selected.push(leads[idx]);
+                }
+            });
+            return selected;
+        }
+
+        // ========== VALIDACIÓN DE CLAVE ==========
+        function validarClave() {
+            const passInput = document.getElementById('emailPass');
+            const clave = passInput.value;
+            const sinEspacios = clave.replace(/\s+/g, '');
+            const longitud = sinEspacios.length;
+            
+            document.getElementById('claveLongitud').innerText = longitud;
+            
+            const validacion = document.getElementById('claveValidacion');
+            
+            if (longitud === 0) {
+                validacion.innerHTML = '<span class="text-slate-500">⏳ Ingresa tu clave de aplicación</span>';
+            } else if (longitud < 16) {
+                validacion.innerHTML = `<span class="text-yellow-500">⚠️ Faltan ${16 - longitud} caracteres. Debe tener 16.</span>`;
+            } else if (longitud > 16) {
+                validacion.innerHTML = `<span class="text-red-500">❌ Demasiados caracteres (${longitud}). Tiene que ser 16.</span>`;
+            } else if (longitud === 16) {
+                validacion.innerHTML = '<span class="text-emerald-500">✅ Clave válida (16 caracteres)</span>';
+                // Guardar automáticamente en caché cuando es válida
+                localStorage.setItem('gmail_app_password', sinEspacios);
+                document.getElementById('claveGuardadaInfo').classList.remove('hidden');
+            }
+            
+            return longitud === 16;
+        }
+
+        function guardarClaveEnCache() {
+            const passInput = document.getElementById('emailPass');
+            const clave = passInput.value;
+            const claveSinEspacios = clave.replace(/\s+/g, '');
+            
+            if (claveSinEspacios.length === 16) {
+                localStorage.setItem('gmail_app_password', claveSinEspacios);
+                document.getElementById('claveGuardadaInfo').classList.remove('hidden');
+                mostrarNotificacion('✅ Clave guardada en caché', 'success');
+            } else {
+                mostrarNotificacion('❌ La clave debe tener 16 caracteres', 'error');
+            }
+        }
+
+        function cargarClaveGuardada() {
+            const claveGuardada = localStorage.getItem('gmail_app_password');
+            if (claveGuardada && claveGuardada.length === 16) {
+                // Formatear con espacios cada 4 caracteres para mejor legibilidad
+                const claveFormateada = claveGuardada.match(/.{1,4}/g)?.join(' ') || claveGuardada;
+                document.getElementById('emailPass').value = claveFormateada;
+                document.getElementById('claveGuardadaInfo').classList.remove('hidden');
+                validarClave();
+                mostrarNotificacion('🔑 Clave cargada desde caché', 'info');
+            } else {
+                mostrarNotificacion('❌ No hay clave guardada o es inválida', 'error');
+            }
+        }
+
+        function mostrarNotificacion(mensaje, tipo) {
+            const notificacion = document.createElement('div');
+            notificacion.className = `fixed bottom-4 right-4 px-4 py-2 rounded-lg text-[10px] font-bold z-[10001] ${
+                tipo === 'success' ? 'bg-emerald-600' : 
+                tipo === 'error' ? 'bg-red-600' : 
+                tipo === 'warning' ? 'bg-yellow-600' : 'bg-blue-600'
+            } text-white shadow-lg`;
+            notificacion.innerText = mensaje;
+            document.body.appendChild(notificacion);
+            setTimeout(() => notificacion.remove(), 3000);
+        }
+
+        // ========== FUNCIONES DE GEMINI CON PAUSAS ==========
+        async function callGemini(prompt, systemInstruction, timeoutMs = 10000) {
+            const controller = new AbortController();
+            abortControllers.push(controller);
+            
+            const timeoutId = setTimeout(() => {
+                controller.abort();
+            }, timeoutMs);
+            
+            try {
+                const res = await fetch('/api/ai_query', { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({ 
+                        prompt, 
+                        systemInstruction,
+                        timeout: timeoutMs 
+                    }),
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (res.status === 429) {
+                    const data = await res.json();
+                    return { error: 'LIMIT', wait: data.retry_after || 10 };
+                }
+                if (res.status === 500) {
+                    return { error: 'SERVER_ERROR', message: 'Error en el servidor de IA' };
+                }
+                if (!res.ok) return { error: 'HTTP_ERROR', status: res.status };
+                
+                const data = await res.json();
+                return { text: data.text || null };
+                
+            } catch (e) {
+                clearTimeout(timeoutId);
+                if (e.name === 'AbortError') {
+                    return { error: 'TIMEOUT', message: 'La IA tardó demasiado' };
+                }
+                return { error: 'FETCH_ERROR', message: e.toString() };
+            } finally {
+                const index = abortControllers.indexOf(controller);
+                if (index > -1) abortControllers.splice(index, 1);
+            }
+        }
+
+        function cancelarTodasLasPeticionesIA() {
+            abortControllers.forEach(controller => {
+                try { controller.abort(); } catch(e) {}
+            });
+            abortControllers = [];
+        }
+
+        // ========== FUNCIONES DE BÚSQUEDA CORREGIDAS ==========
+        async function buscar() {
+    const zonaInput = document.getElementById('zona').value;
+    if(!zonaInput) return;
+    
+    cancelarTodasLasPeticionesIA();
+    revelandoEmails = false;
+    
+    const btn = document.getElementById('btnBuscar');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+    btn.disabled = true;
+    
+    // Mostrar notificación de que está buscando
+    mostrarNotificacion('🔍 Buscando comercios... (puede tomar hasta 30 segundos)', 'info');
+    
+    try {
+        const url = '/search_places';
+        
+        const res = await fetch(url, { 
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'}, 
+            body: JSON.stringify({zona: zonaInput}),
+            timeout: 30000 // Timeout de 30 segundos
+        });
+        
+        if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        
+        const data = await res.json();
+        
+        if (data.success === false) {
+            mostrarNotificacion(`❌ ${data.error || 'Error en la búsqueda'}`, 'error');
+            leads = [];
+            renderTable();
+            document.getElementById('stats').innerText = 'ERROR';
+            document.getElementById('btnAnalizarIA').classList.add('hidden');
+        } else {
+            leads = data.leads || []; 
+            renderTable();
+            document.getElementById('stats').innerText = `${leads.length} RESULTADOS`;
+            
+            if (leads.length > 0) {
+                document.getElementById('btnAnalizarIA').classList.remove('hidden');
+                mostrarNotificacion(`✅ ${leads.length} comercios encontrados`, 'success');
+                
+                setTimeout(() => {
+                    autoRevelarEmails();
+                }, 1000);
+            } else {
+                mostrarNotificacion('⚠️ No se encontraron resultados', 'warning');
+                document.getElementById('btnAnalizarIA').classList.add('hidden');
+            }
+        }
+        
+    } catch(e) { 
+        console.error('Error en búsqueda:', e);
+        mostrarNotificacion('❌ Error de conexión con el servidor. Intenta con una zona más específica.', 'error');
+        leads = [];
+        renderTable();
+        document.getElementById('stats').innerText = 'ERROR CONEXIÓN';
+    } finally { 
+        btn.innerHTML = '<i class="fa-solid fa-search"></i>';
+        btn.disabled = false;
+    }
+}
+
+        // ========== FUNCIÓN DE DIAGNÓSTICO ==========
+        async function verificarAPIKeys() {
+            try {
+                const res = await fetch('/debug/keys');
+                const data = await res.json();
+                console.log('Estado de API Keys:', data);
+                
+                if (!data.maps_key_configured) {
+                    mostrarNotificacion('⚠️ Maps_KEY no configurada en Render', 'error');
+                } else if (!data.gmaps_client_initialized) {
+                    mostrarNotificacion('⚠️ Google Maps client no inicializado', 'error');
+                } else {
+                    mostrarNotificacion('✅ API Keys configuradas correctamente', 'success');
+                }
+            } catch(e) {
+                console.error('Error verificando keys:', e);
+            }
+        }
+
+        // ========== AUTO REVELAR EMAILS CON IA ==========
+        async function autoRevelarEmails() {
+            if (revelandoEmails) return;
+            revelandoEmails = true;
+            
+            mostrarNotificacion('🔍 Buscando emails con IA (pausas de 5 segundos entre cada uno)', 'info');
+            
+            for (let i = 0; i < leads.length; i++) {
+                // Si ya tiene email válido, saltar
+                if (leads[i].email && leads[i].email !== '-' && leads[i].email !== '---' && leads[i].email !== '') {
+                    continue;
+                }
+                
+                const el = document.getElementById(`email-text-${i}`);
+                if (el) el.innerHTML = '<span class="animate-pulse text-blue-500 text-[9px]">✨ Buscando con IA...</span>';
+                
+                // PAUSA DE 5 SEGUNDOS ENTRE CADA PETICIÓN
+                if (i > 0) {
+                    await new Promise(r => setTimeout(r, pausaIA));
+                }
+                
+                const prompt = `Negocio: ${leads[i].nombre}. Ubicación: ${leads[i].direccion}. Responde ÚNICAMENTE el email corporativo o de contacto para ventas mayoristas de este comercio. Si no sabes, responde "No encontrado".`;
+                
+                const res = await callGemini(prompt, "Experto en búsqueda comercial en Argentina. Busca emails reales de contactos comerciales.", 10000);
+                
+                if (res && res.error === 'TIMEOUT') {
+                    if (el) el.innerHTML = '<span class="text-[8px] text-yellow-500 italic">⏱️ Tiempo agotado</span>';
+                    leads[i].email = '-';
+                    renderTable();
+                    continue;
+                }
+                
+                if (res && res.error === 'LIMIT') {
+                    if (el) el.innerHTML = `<span class="text-[8px] text-yellow-500 italic">Esperando cupo IA (${res.wait}s)...</span>`;
+                    await new Promise(r => setTimeout(r, (res.wait + 1) * 1000));
+                    i--; 
+                    continue;
+                }
+
+                if (res && res.text && res.text.toLowerCase().includes('@')) {
+                    leads[i].email = res.text.trim().toLowerCase();
+                    if (el) el.innerHTML = leads[i].email;
+                    mostrarNotificacion(`✅ Email encontrado para ${leads[i].nombre}`, 'success');
+                } else {
+                    leads[i].email = '-';
+                    if (el) el.innerHTML = '-';
+                }
+                
+                renderTable();
+            }
+            
+            revelandoEmails = false;
+            mostrarNotificacion('✨ Búsqueda de emails completada', 'success');
+        }
+
+        // ========== RENDERIZADO DE TABLA ==========
+        function renderTable() {
+            const tbody = document.getElementById('leadsTable');
+            tbody.innerHTML = "";
+            
+            leads.forEach((l, i) => {
+                const tr = document.createElement('tr');
+                tr.id = `row-${i}`;
+                tr.className = "hover:bg-slate-900/40 transition group";
+                
+                const hasValidContact = (l.email && l.email !== '-' && l.email !== '---' && l.email !== '') || l.telefono;
+                const direccion = l.direccion || 'Sin dirección';
+                const direccionCorta = direccion.length > 50 ? direccion.substring(0, 50) + '...' : direccion;
+                
+                tr.innerHTML = `
+                    <td class="px-6 py-4 text-center align-top">
+                        <input type="checkbox" class="lead-check" data-index="${i}" ${hasValidContact ? 'checked' : ''}>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="font-bold text-slate-200">${l.nombre}</div>
+                        <span class="direccion-small">
+                            <i class="fa-solid fa-location-dot text-[8px] mr-1 text-slate-600"></i>
+                            ${direccionCorta}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-center align-top">
+                        <button onclick="abrirChatWhatsAppIndividual(${i})" class="text-emerald-500 font-mono hover:underline w-full clickable-cell p-1 rounded-lg" title="Haz clic para enviar WhatsApp">
+                            <i class="fa-brands fa-whatsapp"></i> ${l.telefono || '--'}
+                        </button>
+                    </td>
+                    <td class="px-6 py-4 align-top">
+                        <div onclick="enviarEmailIndividual(${i}, event)" class="clickable-cell p-2 rounded-lg ${(l.email && l.email !== '-' && l.email !== '---') ? 'text-blue-300 font-bold' : ''}" id="email-cell-${i}" title="Haz clic para enviar email individual">
+                            <span id="email-text-${i}">${l.email || '---'}</span>
+                            <span id="email-check-${i}" class="ml-2 text-emerald-500 text-[9px]" style="display: none;">✓ SEL</span>
+                            ${(l.email && l.email !== '-' && l.email !== '---') ? 
+                                '<span class="text-[8px] block text-slate-500">(clic para enviar)</span>' : 
+                                '<span class="text-[8px] block text-slate-600">sin email</span>'}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 text-center align-top">
+                        <div class="flex justify-center gap-2">
+                            ${l.instagram ? 
+                                `<a href="${l.instagram}" target="_blank" class="social-icon" title="Abrir Instagram">
+                                    <i class="fa-brands fa-instagram text-pink-500 text-lg"></i>
+                                </a>` : ''
+                            }
+                            ${l.facebook ? 
+                                `<a href="${l.facebook}" target="_blank" class="social-icon" title="Abrir Facebook">
+                                    <i class="fa-brands fa-facebook text-blue-500 text-lg"></i>
+                                </a>` : ''
+                            }
+                            ${l.web ? 
+                                `<a href="${l.web}" target="_blank" class="social-icon" title="Abrir sitio web">
+                                    <i class="fa-solid fa-globe text-slate-400 text-lg"></i>
+                                </a>` : ''
+                            }
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 text-center align-top" id="status-${i}">
+                        <span class="text-[9px] text-slate-700 uppercase font-black">Pendiente</span>
+                    </td>
+                `;
+                
+                tbody.appendChild(tr);
+            });
+            
+            // Actualizar checkboxes después de renderizar
+            document.querySelectorAll('.lead-check').forEach(c => {
+                c.addEventListener('change', function() {
+                    const index = this.dataset.index;
+                    const emailCell = document.getElementById(`email-cell-${index}`);
+                    const emailCheck = document.getElementById(`email-check-${index}`);
+                    
+                    if (emailCell && emailCheck) {
+                        if (this.checked) {
+                            emailCell.classList.add('selected');
+                            emailCheck.style.display = 'inline';
+                        } else {
+                            emailCell.classList.remove('selected');
+                            emailCheck.style.display = 'none';
+                        }
+                    }
+                });
+            });
+        }
+
+        // ========== ENVÍO DE EMAIL INDIVIDUAL ==========
+        function enviarEmailIndividual(index, event) {
+            event.stopPropagation();
+            const l = leads[index];
+            
+            if (!l.email || l.email === '-' || l.email === '---') {
+                mostrarNotificacion('❌ No hay email disponible', 'error');
+                return;
+            }
+            
+            let cuerpo = document.getElementById('emailBody').value;
+            cuerpo = cuerpo.replace('{nombre}', l.nombre)
+                          .replace('{direccion}', l.direccion || '');
+            
+            const asunto = encodeURIComponent('Oferta Mayorista - Yerba Mate Soberanía');
+            const cuerpoEncoded = encodeURIComponent(cuerpo);
+            
+            window.location.href = `mailto:${l.email}?subject=${asunto}&body=${cuerpoEncoded}`;
+            
+            document.getElementById(`status-${index}`).innerHTML = 
+                '<span class="text-[9px] text-blue-500 font-black uppercase">✉️ Email abierto</span>';
+            
+            mostrarNotificacion(`📧 Email listo para ${l.nombre}`, 'info');
+        }
+
+        // ========== FUNCIONES DE WHATSAPP ==========
+        function abrirChatWhatsAppIndividual(index) {
+            const l = leads[index];
+            if(!l.telefono) {
+                mostrarNotificacion('❌ No hay teléfono disponible', 'error');
+                return;
+            }
+            
+            const body = document.getElementById('waBody').value.replace('{nombre}', l.nombre);
+            let url = `https://web.whatsapp.com/send?phone=${l.telefono}&text=${encodeURIComponent(body)}`;
+            
+            window.open(url, '_blank');
+            document.getElementById(`status-${index}`).innerHTML = 
+                '<span class="text-[9px] text-emerald-500 font-black uppercase">📱 WhatsApp abierto</span>';
+        }
+
+        function iniciarWhatsAppSecuencial() {
+            waCola = []; 
+            document.querySelectorAll('.lead-check:checked').forEach(c => waCola.push(parseInt(c.dataset.index))); 
+            
+            if(waCola.length === 0) {
+                mostrarNotificacion('❌ Selecciona al menos un comercio', 'error');
+                return;
+            }
+            
+            if (waWindow && !waWindow.closed) {
+                try { waWindow.close(); } catch(e) {}
+            }
+            waWindow = null;
+            waCursor = 0;
+            
+            document.getElementById('waModal').style.display = 'flex'; 
+            actualizarModalWASecuencial(); 
+        }
+
+        function actualizarModalWASecuencial() {
+            if(waCursor >= waCola.length) { 
+                document.getElementById('modalTitle').innerText = "¡Proceso completado!"; 
+                document.getElementById('modalProgress').innerText = `Se enviaron ${waCola.length} WhatsApps`; 
+                document.getElementById('btnSiguienteWA').style.display = 'none';
+                document.getElementById('modalInstructions').innerHTML = '✅ Todos los mensajes han sido procesados';
+                mostrarNotificacion('✅ Proceso de WhatsApp completado', 'success');
+                return; 
+            } 
+            
+            const current = leads[waCola[waCursor]]; 
+            document.getElementById('modalTitle').innerText = current.nombre; 
+            document.getElementById('modalProgress').innerText = `${waCursor + 1} de ${waCola.length}`; 
+            
+            document.querySelectorAll('tr').forEach(r => r.classList.remove('sending-row')); 
+            document.getElementById(`row-${waCola[waCursor]}`).classList.add('sending-row');
+            
+            document.getElementById('btnSiguienteWA').style.display = 'block';
+            document.getElementById('modalInstructions').innerHTML = '1. Haz clic en "Abrir Chat"<br>2. Presiona ENVIAR en WhatsApp<br>3. Vuelve y continúa automáticamente';
+        }
+
+        function abrirSiguienteWASecuencial() {
+            if (waCursor >= waCola.length) {
+                cerrarModalWA();
+                return;
+            }
+            
+            const idx = waCola[waCursor];
+            const l = leads[idx];
+            
+            if (!l.telefono) {
+                waCursor++;
+                actualizarModalWASecuencial();
+                return;
+            }
+            
+            const body = document.getElementById('waBody').value.replace('{nombre}', l.nombre);
+            const version = document.getElementById('waVersion').value;
+            
+            let url = version === 'web' 
+                ? `https://web.whatsapp.com/send?phone=${l.telefono}&text=${encodeURIComponent(body)}`
+                : `whatsapp://send?phone=${l.telefono}&text=${encodeURIComponent(body)}`;
+            
+            if (waWindow && !waWindow.closed) {
+                try {
+                    waWindow.location.href = url;
+                    waWindow.focus();
+                } catch(e) {
+                    waWindow = window.open(url, 'whatsapp_soberania');
+                }
+            } else {
+                waWindow = window.open(url, 'whatsapp_soberania');
+            }
+            
+            document.getElementById(`status-${idx}`).innerHTML = 
+                '<span class="text-emerald-500 font-black uppercase">Chat Abierto</span>';
+            
+            waCursor++;
+            
+            setTimeout(() => {
+                if (waCursor < waCola.length) {
+                    actualizarModalWASecuencial();
+                } else {
+                    actualizarModalWASecuencial();
+                }
+            }, 500);
+        }
+
+        function cerrarModalWA() { 
+            document.getElementById('waModal').style.display = 'none';
+        }
+
+        // ========== FUNCIONES DE SELECCIÓN ==========
+        function toggleAll() { 
+            const m = document.getElementById('selectAll'); 
+            document.querySelectorAll('.lead-check').forEach((c) => {
+                c.checked = m.checked;
+                const index = c.dataset.index;
+                const emailCell = document.getElementById(`email-cell-${index}`);
+                const emailCheck = document.getElementById(`email-check-${index}`);
+                
+                if (emailCell && emailCheck) {
+                    if (m.checked) {
+                        emailCell.classList.add('selected');
+                        if (emailCheck) emailCheck.style.display = 'inline';
+                    } else {
+                        emailCell.classList.remove('selected');
+                        if (emailCheck) emailCheck.style.display = 'none';
+                    }
+                }
+            });
+        }
+
+        // ========== CAMPAÑA DE EMAILS SMTP ==========
+        async function iniciarCampanaEmails() {
+            const user = document.getElementById('emailUser').value;
+            let pass = document.getElementById('emailPass').value;
+            const bodyContent = document.getElementById('emailBody').value;
+            const btn = document.getElementById('btnCampanaEmails');
+            
+            if(!user || !pass) {
+                mostrarNotificacion('❌ Configura tu Gmail y la Clave de Aplicación', 'error');
+                return;
+            }
+            
+            const passSinEspacios = pass.replace(/\s+/g, '');
+            
+            if (passSinEspacios.length !== 16) {
+                mostrarNotificacion('❌ La clave debe tener 16 caracteres exactos', 'error');
+                return;
+            }
+            
+            const selected = []; 
+            document.querySelectorAll('.lead-check:checked').forEach(c => { 
+                const idx = parseInt(c.dataset.index); 
+                if(leads[idx].email && leads[idx].email !== '-' && leads[idx].email !== '---' && leads[idx].email !== '') {
+                    selected.push({
+                        ...leads[idx], 
+                        original_index: idx
+                    }); 
+                }
+            }); 
+            
+            if(selected.length === 0) {
+                mostrarNotificacion('❌ Selecciona al menos un comercio con email válido', 'error');
+                return;
+            }
+
+            const modal = document.getElementById('emailProgressModal');
+            const content = document.getElementById('emailProgressContent');
+            const progressFill = document.getElementById('emailProgressFill');
+            const progressText = document.getElementById('emailProgressText');
+            
+            modal.style.display = 'flex';
+            content.innerHTML = '🚀 INICIANDO CAMPAÑA DE EMAILS...\n\n';
+            content.innerHTML += `📧 Destinatarios: ${selected.length}\n`;
+            content.innerHTML += `📎 Adjunto: producto.png\n`;
+            content.innerHTML += `👤 Remitente: ${user}\n`;
+            content.innerHTML += `🔑 Clave: ${passSinEspacios.substring(0,4)}...${passSinEspacios.substring(passSinEspacios.length-4)} (${passSinEspacios.length} caracteres)\n\n`;
+            content.innerHTML += `⏳ Enviando emails...\n\n`;
+            
+            progressFill.style.width = '0%';
+            progressText.innerText = '0% completado';
+            
+            btn.disabled = true; 
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando emails...';
+            
+            try {
+                const emailResponse = await fetch('/start_email_campaign', {
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ 
+                        leads: selected, 
+                        email_user: user, 
+                        email_pass: passSinEspacios,
+                        subject: "Oferta Mayorista - Yerba Mate Soberanía", 
+                        body: bodyContent, 
+                        attach_image: true 
+                    })
+                });
+
+                if (!emailResponse.ok) {
+                    throw new Error(`HTTP error! status: ${emailResponse.status}`);
+                }
+
+                const reader = emailResponse.body.getReader();
+                const decoder = new TextDecoder();
+                let emailsEnviados = 0;
+                let emailsExitosos = 0;
+                let emailsFallidos = 0;
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const lines = decoder.decode(value).split('\n');
+                    
+                    lines.forEach(line => {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.replace('data: ', ''));
+                                
+                                if (data.status === 'finished') { 
+                                    content.innerHTML += '\n✅ CAMPAÑA DE EMAILS FINALIZADA\n';
+                                    content.innerHTML += `✅ Exitosos: ${emailsExitosos}\n`;
+                                    content.innerHTML += `❌ Fallidos: ${emailsFallidos}\n`;
+                                    progressFill.style.width = '100%';
+                                    progressText.innerText = '100% completado';
+                                    mostrarNotificacion('✅ Campaña de emails finalizada', 'success');
+                                }
+                                else if (data.index !== undefined) {
+                                    emailsEnviados++;
+                                    if (data.success) emailsExitosos++; else emailsFallidos++;
+                                    
+                                    const row = document.getElementById(`status-${data.index}`);
+                                    if(row) {
+                                        row.innerHTML = `<span class="text-[9px] ${data.success ? 'text-green-500' : 'text-red-500'} font-black uppercase">${data.msg}</span>`;
+                                    }
+                                    
+                                    const porcentaje = Math.round((emailsEnviados / selected.length) * 100);
+                                    progressFill.style.width = `${porcentaje}%`;
+                                    progressText.innerText = `${porcentaje}% completado`;
+                                    
+                                    content.innerHTML += `${emailsEnviados}/${selected.length}: ${data.success ? '✅' : '❌'} ${leads[data.index]?.nombre || ''} - ${data.msg}\n`;
+                                    
+                                    const contentDiv = document.getElementById('emailProgressContent');
+                                    contentDiv.scrollTop = contentDiv.scrollHeight;
+                                }
+                            } catch(e) {
+                                console.error('Error parseando SSE:', e);
+                            }
+                        }
+                    });
+                }
+            } catch(e) { 
+                console.error('Error en campaña de emails:', e);
+                content.innerHTML += `\n❌ Error en campaña de emails: ${e.toString()}\n`;
+                content.innerHTML += `\n🔧 VERIFICA:\n`;
+                content.innerHTML += `1. Verificación en 2 pasos ACTIVADA\n`;
+                content.innerHTML += `2. Contraseña de aplicación VÁLIDA (16 caracteres)\n`;
+                content.innerHTML += `3. Gmail correcto: ${user}\n`;
+                mostrarNotificacion('❌ Error al enviar emails', 'error');
+            } finally {
+                btn.disabled = false; 
+                btn.innerHTML = '<i class="fa-solid fa-envelope"></i> ENVIAR CAMPAÑA DE EMAILS (SMTP)';
+            }
+        }
+
+        function cerrarEmailModal() {
+            document.getElementById('emailProgressModal').style.display = 'none';
+        }
+
+        // ========== FUNCIONES DE IA ==========
+        async function generarPitchIA() { 
+            const btn = document.getElementById('btnPitchIA'); 
+            const textarea = document.getElementById('waBody'); 
+            
+            btn.innerText = "✨..."; 
+            btn.classList.add('ai-loading'); 
+            
+            const res = await callGemini(
+                "Genera un mensaje corto de WhatsApp para un dueño de dietética vendiendo Yerba Mate Soberanía. Usa {nombre}. Sé cordial y profesional.", 
+                "Vendedor estrella.",
+                8000
+            ); 
+            
+            if(res && res.text) {
+                textarea.value = res.text;
+                mostrarNotificacion('✨ Mensaje generado por IA', 'success');
+            } else {
+                mostrarNotificacion('⏱️ Usando mensaje predeterminado', 'info');
+            }
+            
+            btn.innerText = "✨ Sugerir Texto"; 
+            btn.classList.remove('ai-loading'); 
+        }
+
+        async function analizarZonaIA() { 
+            if (!leads || leads.length === 0) {
+                mostrarNotificacion('❌ Busca comercios primero', 'error');
+                return;
+            }
+            
+            const modal = document.getElementById('aiModal'); 
+            const content = document.getElementById('aiResponseContent'); 
+            
+            modal.style.display = 'flex'; 
+            content.innerText = "✨ IA Analizando zona...\n\n⏱️ Esto puede tomar hasta 10 segundos..."; 
+            
+            const nombres = leads.slice(0, 10).map(l => l.nombre).join(", ");
+            const prompt = `Analiza estos comercios: ${nombres}. Dame 3 consejos de venta específicos para Yerba Mate Soberanía enfocados en dietéticas.`; 
+            const res = await callGemini(prompt, "Estratega comercial experto en marketing para alimentos.", 10000); 
+            
+            if (res && res.text) {
+                content.innerText = res.text;
+            } else if (res && res.error === 'TIMEOUT') {
+                content.innerText = "⏱️ La IA tardó demasiado. Consejos rápidos:\n\n1. Destacar origen misionero\n2. Enfocar en precio mayorista\n3. Ofrecer muestras gratis";
+            } else if (res && res.error === 'LIMIT') {
+                content.innerText = `⏳ Límite de cuota de IA excedido. Espera ${res.wait} segundos.`;
+            } else if (res && res.error === 'SERVER_ERROR') {
+                content.innerText = "⚠️ Error en el servidor de IA. Verifica la API key en Render.";
+            } else {
+                content.innerText = "❌ Error al conectar con la IA.";
+            }
+        }
+
+        function cerrarAIModal() { 
+            document.getElementById('aiModal').style.display = 'none'; 
+        }
+
+        // ========== FUNCIONES DEL TUTORIAL ==========
+        function iniciarTutorial() {
+            if (tutorialActivo) {
+                cerrarTutorial();
+                setTimeout(() => iniciarTutorialPasos(), 300);
+            } else {
+                iniciarTutorialPasos();
+            }
+        }
+
+        function iniciarTutorialPasos() {
+            tutorialActivo = true;
+            tutorialPaso = 0;
+            const overlay = document.getElementById('tutorialOverlay');
+            overlay.style.display = 'block';
+            mostrarPasoTutorial();
+        }
+
+        function mostrarPasoTutorial() {
+            if (!tutorialActivo) return;
+            
+            const paso = tutorialPasos[tutorialPaso];
+            if (!paso) {
+                cerrarTutorial();
+                return;
+            }
+
+            const overlay = document.getElementById('tutorialOverlay');
+            overlay.innerHTML = '';
+            
+            const card = document.createElement('div');
+            card.className = 'tutorial-card-mini';
+            card.id = 'tutorialCard';
+            
+            const elemento = document.getElementById(paso.elemento);
+            if (elemento) {
+                const rect = elemento.getBoundingClientRect();
+                elemento.classList.add('tutorial-highlight');
+                
+                if (paso.posicion === 'right') {
+                    card.style.left = (rect.right + 20) + 'px';
+                    card.style.top = rect.top + 'px';
+                } else if (paso.posicion === 'bottom') {
+                    card.style.left = rect.left + 'px';
+                    card.style.top = (rect.bottom + 20) + 'px';
+                }
+                
+                const arrow = document.createElement('div');
+                arrow.className = 'tutorial-arrow';
+                if (paso.posicion === 'right') {
+                    arrow.style.left = '-10px';
+                    arrow.style.top = '20px';
+                    arrow.style.transform = 'rotate(180deg)';
+                } else if (paso.posicion === 'bottom') {
+                    arrow.style.left = '20px';
+                    arrow.style.top = '-10px';
+                    arrow.style.transform = 'rotate(90deg)';
+                }
+                card.appendChild(arrow);
+            }
+            
+            const titulo = document.createElement('h3');
+            titulo.className = 'font-black text-emerald-500 text-xs uppercase mb-2';
+            titulo.innerText = paso.titulo;
+            
+            const texto = document.createElement('p');
+            texto.className = 'text-[11px] text-slate-300 leading-relaxed mb-4';
+            texto.innerText = paso.texto;
+            
+            const dotsContainer = document.createElement('div');
+            dotsContainer.className = 'tutorial-dots';
+            for (let i = 0; i < tutorialPasos.length; i++) {
+                const dot = document.createElement('div');
+                dot.className = `tutorial-dot ${i === tutorialPaso ? 'active' : ''}`;
+                dotsContainer.appendChild(dot);
+            }
+            
+            const botones = document.createElement('div');
+            botones.className = 'flex justify-between items-center mt-4';
+            
+            const btnAnterior = document.createElement('button');
+            btnAnterior.className = 'text-slate-400 text-[9px] font-bold hover:text-white transition px-3 py-1.5 rounded-lg';
+            btnAnterior.innerText = '◀ ANTERIOR';
+            btnAnterior.onclick = (e) => { e.stopPropagation(); pasoAnteriorTutorial(); };
+            if (tutorialPaso === 0) btnAnterior.style.visibility = 'hidden';
+            
+            const btnSiguiente = document.createElement('button');
+            btnSiguiente.className = 'bg-emerald-600 text-white font-black px-4 py-1.5 rounded-lg text-[9px] uppercase hover:bg-emerald-500 transition';
+            btnSiguiente.innerText = (tutorialPaso === tutorialPasos.length - 1) ? 'FINALIZAR ▶' : 'SIGUIENTE ▶';
+            btnSiguiente.onclick = (e) => { e.stopPropagation(); pasoSiguienteTutorial(); };
+            
+            const btnCerrar = document.createElement('button');
+            btnCerrar.className = 'text-red-500 text-[9px] font-bold hover:text-red-400 transition px-3 py-1.5 rounded-lg';
+            btnCerrar.innerText = '✕ CERRAR';
+            btnCerrar.onclick = (e) => { e.stopPropagation(); cerrarTutorial(); };
+            
+            botones.appendChild(btnAnterior);
+            botones.appendChild(btnSiguiente);
+            botones.appendChild(btnCerrar);
+            
+            card.appendChild(titulo);
+            card.appendChild(texto);
+            card.appendChild(dotsContainer);
+            card.appendChild(botones);
+            
+            overlay.appendChild(card);
+        }
+
+        function pasoSiguienteTutorial() {
+            const pasoActual = tutorialPasos[tutorialPaso];
+            if (pasoActual) {
+                const el = document.getElementById(pasoActual.elemento);
+                if (el) el.classList.remove('tutorial-highlight');
+            }
+            
+            tutorialPaso++;
+            if (tutorialPaso >= tutorialPasos.length) {
+                cerrarTutorial();
+            } else {
+                mostrarPasoTutorial();
+            }
+        }
+
+        function pasoAnteriorTutorial() {
+            const pasoActual = tutorialPasos[tutorialPaso];
+            if (pasoActual) {
+                const el = document.getElementById(pasoActual.elemento);
+                if (el) el.classList.remove('tutorial-highlight');
+            }
+            
+            tutorialPaso--;
+            if (tutorialPaso < 0) tutorialPaso = 0;
+            mostrarPasoTutorial();
+        }
+
+        function cerrarTutorial() {
+            tutorialActivo = false;
+            tutorialPaso = 0;
+            const overlay = document.getElementById('tutorialOverlay');
+            overlay.style.display = 'none';
+            overlay.innerHTML = '';
+            
+            tutorialPasos.forEach(paso => {
+                const el = document.getElementById(paso.elemento);
+                if (el) el.classList.remove('tutorial-highlight');
+            });
+        }
+
+        // ========== INICIALIZACIÓN ==========
+        window.onload = () => {
+            // Verificar imagen
+            const img = document.getElementById('productImagePreview');
+            img.onerror = function() {
+                this.style.display = 'none';
+                const parent = this.parentElement;
+                if (parent) {
+                    const msg = document.createElement('p');
+                    msg.className = 'text-[9px] text-yellow-500';
+                    msg.innerText = '⚠️ Archivo producto.png no encontrado en la raíz del servidor';
+                    parent.appendChild(msg);
+                }
+            };
+            
+            // Cargar clave guardada
+            cargarClaveGuardada();
+            
+            // Validar clave al cargar
+            validarClave();
+            
+            // Verificar API Keys
+            verificarAPIKeys();
+            
+            // Verificar autenticación Gmail
+            checkGmailAuth();
+            
+            // Tutorial automático
+            if (!sessionStorage.getItem('tutorialVisto')) {
+                setTimeout(() => {
+                    iniciarTutorial();
+                    sessionStorage.setItem('tutorialVisto', 'true');
+                }, 1000);
+            }
+            
+            // Verificar estado de autenticación cada 30 segundos
+            setInterval(checkGmailAuth, 30000);
+        };
+    </script>
+</body>
+</html>
