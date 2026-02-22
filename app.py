@@ -51,6 +51,7 @@ GOOGLE_MAPS_KEY = (
     os.environ.get('Maps_KEY') or
     os.environ.get('GOOGLE_MAPS_KEY') or
     os.environ.get('GMAPS_API_KEY') or
+    os.environ.get('API_KEY') or
     ''
 )
 
@@ -63,7 +64,7 @@ GEMINI_API_KEY = (
 # Logging de configuración
 logger.info("=" * 50)
 logger.info("CONFIGURACIÓN DE API KEYS:")
-logger.info(f"📌 Maps_KEY: {'✅ Configurada' if GOOGLE_MAPS_KEY else '❌ NO CONFIGURADA'}")
+logger.info(f"📌 API_KEY: {'✅ Configurada' if GOOGLE_MAPS_KEY else '❌ NO CONFIGURADA'}")
 logger.info(f"📌 GEMINI_API_KEY: {'✅ Configurada' if GEMINI_API_KEY else '❌ NO CONFIGURADA'}")
 logger.info(f"📌 GMAIL_CLIENT_ID: {'✅ Configurada' if GOOGLE_CLIENT_ID else '❌ NO CONFIGURADA'}")
 logger.info("=" * 50)
@@ -71,7 +72,7 @@ logger.info("=" * 50)
 # Inicializar Google Maps client
 try:
     if GOOGLE_MAPS_KEY:
-        gmaps = googlemaps.Client(key=GOOGLE_MAPS_KEY, timeout=10)
+        gmaps = googlemaps.Client(key=API_KEY, timeout=10)
         try:
             test = gmaps.geocode("Buenos Aires")
             logger.info("✅ Google Maps API funcionando correctamente")
