@@ -881,11 +881,12 @@ def search_places_stream():
         yield f"data: {json.dumps({'status': 'start', 'message': f'Iniciando búsqueda en {zona}...'})}\n\n"
         
         # Enviar estado inicial de las APIs
-        yield f"data: {json.dumps({
+        initial_status = {
             'status': 'api_status', 
             'gemini': gemini_limiter.get_status(),
             'google_maps': gmaps_limiter.get_status()
-        })}\n\n"
+        }
+        yield f"data: {json.dumps(initial_status)}\n\n"
 
         try:
             # ===== 1. VERIFICAR LÍMITES ANTES DE EMPEZAR =====
@@ -989,11 +990,12 @@ def search_places_stream():
             
             for batch_start in range(0, total_places, BATCH_SIZE):
                 # Actualizar estado de las APIs
-                yield f"data: {json.dumps({
+                api_update = {
                     'status': 'api_update', 
                     'gemini': gemini_limiter.get_status(),
                     'google_maps': gmaps_limiter.get_status()
-                })}\n\n"
+                }
+                yield f"data: {json.dumps(api_update)}\n\n"
                 
                 # Verificar límites de detalles antes del lote
                 can_detail, wait_time, reason = gmaps_limiter.can_make_detail()
@@ -1101,12 +1103,14 @@ def search_places_stream():
                         yield f"data: {json.dumps({'status': 'error', 'message': f'Error en {nombre_lugar}: {str(e)[:50]}', 'failed_index': idx})}\n\n"
                     
                     # Verificar si debemos continuar después de cada lugar
-                    if not gmaps_limiter.can_make_detail()[0]:
+                    can_detail, _, _ = gmaps_limiter.can_make_detail()
+                    if not can_detail:
                         yield f"data: {json.dumps({'status': 'warning', 'message': '⚠️ Límite de detalles alcanzado. Deteniendo procesamiento.'})}\n\n"
                         break
-
+                
                 # Verificar si debemos continuar después del lote
-                if not gmaps_limiter.can_make_detail()[0]:
+                can_detail, _, _ = gmaps_limiter.can_make_detail()
+                if not can_detail:
                     break
                 
                 # Pausa entre lotes
