@@ -518,28 +518,40 @@ def search_places():
     try:
         logger.info(f"🔍 Buscando dietéticas en: {zona}")
         
+        # Usar solo 2 queries principales para no saturar
         queries = [
             f"dietetica en {zona}",
-            f"dietética {zona}",
-            f"health food store {zona}",
-            f"natural products {zona}"
+            f"dietética {zona}"
         ]
         
         leads = []
         response = None
-        all_results = []  # Para acumular resultados de múltiples queries
+        all_results = []
         
         for query in queries:
             try:
+                # Primera página de resultados
                 response = gmaps.places(query=query)
                 if response.get('results'):
-                    # Agregar resultados que no estén ya en all_results
                     for result in response.get('results', []):
-                        # Evitar duplicados basados en place_id
                         if not any(r.get('place_id') == result.get('place_id') for r in all_results):
                             all_results.append(result)
                     
-                    logger.info(f"✅ Encontrados {len(response['results'])} con: '{query}' (Total acumulado: {len(all_results)})")
+                    logger.info(f"✅ Encontrados {len(response['results'])} con: '{query}'")
+                    
+                    # Intentar obtener segunda página (más resultados)
+                    if 'next_page_token' in response:
+                        time.sleep(2)  # Esperar 2 segundos como recomienda Google
+                        try:
+                            next_response = gmaps.places(page_token=response['next_page_token'])
+                            if next_response.get('results'):
+                                for result in next_response.get('results', []):
+                                    if not any(r.get('place_id') == result.get('place_id') for r in all_results):
+                                        all_results.append(result)
+                                logger.info(f"✅ +{len(next_response['results'])} más de segunda página")
+                        except Exception as e:
+                            logger.debug(f"Error obteniendo segunda página: {e}")
+                            
             except Exception as e:
                 logger.debug(f"Error con query '{query}': {e}")
                 continue
@@ -547,12 +559,13 @@ def search_places():
         if not all_results:
             return jsonify({'success': True, 'leads': [], 'total': 0}), 200
         
-        # Procesar hasta 50 resultados (límite máximo de Google Places API por página)
-        results = all_results[:50]
-        logger.info(f"Procesando {len(results)} resultados...")
+        # Limitar a 30 resultados para mejor performance
+        results = all_results[:30]
+        logger.info(f"Procesando {len(results)} resultados (límite: 30 para mejor performance)...")
         
-        for p in results:
+        for idx, p in enumerate(results):
             try:
+                # Obtener detalles del lugar
                 det = gmaps.place(
                     place_id=p['place_id'], 
                     fields=['name', 'formatted_address', 'formatted_phone_number', 'website']
@@ -561,20 +574,16 @@ def search_places():
                 tel_raw = det.get('formatted_phone_number', '')
                 tel_clean = re.sub(r'\D', '', tel_raw)
                 
+                # Formatear teléfono
                 if tel_clean:
-                    if tel_clean.startswith('549'):
-                        tel_clean = tel_clean
-                    elif tel_clean.startswith('54'):
-                        tel_clean = tel_clean
-                    elif tel_clean.startswith('0'):
-                        tel_clean = '54' + tel_clean[1:]
-                    else:
-                        tel_clean = '54' + tel_clean
+                    if not tel_clean.startswith('54'):
+                        tel_clean = '54' + tel_clean if not tel_clean.startswith('0') else '54' + tel_clean[1:]
                 
                 web = det.get('website', '')
                 contacto = {"email": "", "facebook": "", "instagram": ""}
                 
-                if web:
+                # Solo hacer scraping si hay web y es uno de cada 3 para no saturar
+                if web and idx % 3 == 0:  # Scrapear solo 1 de cada 3
                     try:
                         contacto = scraping_profundo_contacto(web, False)
                     except:
@@ -584,15 +593,19 @@ def search_places():
                     'nombre': det.get('name', 'Sin nombre'),
                     'direccion': det.get('formatted_address', 'Sin dirección'),
                     'telefono': tel_clean[:15] if tel_clean else '',
-                    'tel_display': tel_raw[:20] if tel_raw else 'No disponible',
+                    'tel_display': tel_raw[:30] if tel_raw else 'No disponible',
                     'email': contacto["email"] or '',
                     'facebook': contacto["facebook"] or '',
                     'instagram': contacto["instagram"] or '',
                     'web': web or ''
                 })
                 
+                # Pequeña pausa entre procesamientos para no saturar
+                if idx % 5 == 0 and idx > 0:
+                    time.sleep(0.5)
+                
             except Exception as e:
-                logger.error(f"Error procesando lugar: {e}")
+                logger.error(f"Error procesando lugar {idx}: {e}")
                 continue
 
         logger.info(f"✅ Total leads procesados: {len(leads)}")
@@ -607,10 +620,9 @@ def search_places():
         logger.error(f"Error en search_places: {e}")
         return jsonify({
             'success': False,
-            'error': f'Error: {str(e)[:50]}',
+            'error': f'Error en la búsqueda: {str(e)[:100]}',
             'leads': []
         }), 200
-
 # ========== RUTA DE GENERACIÓN CSV ==========
 @app.route('/generate_csv', methods=['POST'])
 def generate_csv():
