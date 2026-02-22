@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Yerba Soberanía - Automatización e IA</title>
-    <!-- Tailwind CSS CDN solo para desarrollo, se puede reemplazar en producción -->
+    <!-- Tailwind CSS CDN solo para desarrollo -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -685,7 +685,7 @@ Juan Ignacio Lewczuk
         
         // NUEVAS VARIABLES PARA CONTROL DE BÚSQUEDA
         let busquedaActiva = true;
-        let eventSourceActual = null;
+        let currentController = null; // Para controlar fetch/streaming
         
         // VARIABLES PARA GMAIL
         let gmailAuthorized = false;
@@ -756,6 +756,12 @@ Juan Ignacio Lewczuk
         }
 
         function detenerBusqueda() {
+            // Cancelar el fetch actual si existe
+            if (currentController) {
+                currentController.abort();
+                currentController = null;
+            }
+            
             fetch('/stop_search', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }
@@ -763,10 +769,6 @@ Juan Ignacio Lewczuk
             .then(response => response.json())
             .then(data => {
                 console.log('Búsqueda detenida:', data);
-                if (eventSourceActual) {
-                    eventSourceActual.close();
-                    eventSourceActual = null;
-                }
                 actualizarEstadoBusqueda(false);
                 document.getElementById('streamingStatus').innerHTML = '🛑 Búsqueda detenida por usuario';
                 mostrarNotificacion('🛑 Búsqueda detenida', 'warning');
@@ -1117,7 +1119,7 @@ Juan Ignacio Lewczuk
             abortControllers = [];
         }
 
-        // ========== NUEVA FUNCIÓN DE BÚSQUEDA CON STREAMING (HASTA 40 RESULTADOS) ==========
+        // ========== NUEVA FUNCIÓN DE BÚSQUEDA CON FETCH STREAMING ==========
         async function buscar() {
             const zonaInput = document.getElementById('zona').value;
             if(!zonaInput) return;
@@ -1125,10 +1127,10 @@ Juan Ignacio Lewczuk
             cancelarTodasLasPeticionesIA();
             revelandoEmails = false;
             
-            // Cerrar event source anterior si existe
-            if (eventSourceActual) {
-                eventSourceActual.close();
-                eventSourceActual = null;
+            // Cancelar fetch anterior si existe
+            if (currentController) {
+                currentController.abort();
+                currentController = null;
             }
             
             const btn = document.getElementById('btnBuscar');
@@ -1149,132 +1151,145 @@ Juan Ignacio Lewczuk
             // Actualizar estado a activo
             actualizarEstadoBusqueda(true);
             
+            // Crear nuevo AbortController para esta búsqueda
+            currentController = new AbortController();
+            
             try {
-                // Usar EventSource para SSE
-                eventSourceActual = new EventSource(`/search_places_stream?zona=${encodeURIComponent(zonaInput)}`);
+                const response = await fetch('/search_places_stream', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({zona: zonaInput}),
+                    signal: currentController.signal
+                });
                 
-                eventSourceActual.onmessage = function(e) {
-                    try {
-                        const data = JSON.parse(e.data);
-                        
-                        switch(data.status) {
-                            case 'start':
-                                streamingStatus.innerHTML = `📡 ${data.message}`;
-                                break;
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
                                 
-                            case 'api_status':
-                                // Actualizar estado de APIs
-                                break;
-                                
-                            case 'query':
-                                streamingStatus.innerHTML = `📡 Probando: "${data.query}"`;
-                                break;
-                                
-                            case 'found':
-                                streamingStatus.innerHTML = `📡 Encontrados ${data.count} con "${data.query}"`;
-                                break;
-                                
-                            case 'waiting':
-                                streamingStatus.innerHTML = `⏳ ${data.message}`;
-                                break;
-                                
-                            case 'page':
-                                streamingStatus.innerHTML = `📄 Página ${data.page}: ${data.count} resultados`;
-                                break;
-                                
-                            case 'processing':
-                                streamingStatus.innerHTML = `📊 Procesando ${data.total} lugares...`;
-                                break;
-                                
-                            case 'batch':
-                                streamingStatus.innerHTML = `📦 Lote ${data.start}-${data.end}`;
-                                break;
-                                
-                            case 'processing_one':
-                                streamingStatus.innerHTML = `🔍 Procesando ${data.current}/${data.total}: ${data.name}`;
-                                break;
-                                
-                            case 'lead':
-                                // LLEGÓ UN NUEVO LEAD - agregarlo a la tabla
-                                leads.push(data.lead);
-                                renderTable();
-                                document.getElementById('stats').innerText = `${leads.length} RESULTADOS`;
-                                document.getElementById('resultadosCount').innerText = leads.length;
-                                break;
-                                
-                            case 'pause':
-                                streamingStatus.innerHTML = `⏸️ ${data.message}`;
-                                break;
-                                
-                            case 'stopped':
-                                streamingStatus.innerHTML = `🛑 ${data.message}`;
-                                actualizarEstadoBusqueda(false);
-                                eventSourceActual.close();
-                                eventSourceActual = null;
-                                btn.innerHTML = '<i class="fa-solid fa-search"></i>';
-                                btn.disabled = false;
-                                mostrarNotificacion('🛑 Búsqueda detenida', 'warning');
-                                break;
-                                
-                            case 'error':
-                                mostrarNotificacion(`⚠️ ${data.message}`, 'warning');
-                                streamingStatus.innerHTML = `⚠️ Error: ${data.message}`;
-                                break;
-                                
-                            case 'complete':
-                                streamingStatus.innerHTML = `✅ Búsqueda completada: ${data.total} resultados`;
-                                document.getElementById('stats').innerText = `${data.total} RESULTADOS`;
-                                document.getElementById('resultadosCount').innerText = data.total;
-                                actualizarEstadoBusqueda(false);
-                                
-                                if (data.total > 0) {
-                                    document.getElementById('btnAnalizarIA').classList.remove('hidden');
-                                    mostrarNotificacion(`✅ ${data.total} comercios encontrados`, 'success');
-                                } else {
-                                    mostrarNotificacion('⚠️ No se encontraron resultados', 'warning');
+                                switch(data.status) {
+                                    case 'start':
+                                        streamingStatus.innerHTML = `📡 ${data.message}`;
+                                        break;
+                                        
+                                    case 'api_status':
+                                        // Actualizar estado de APIs
+                                        break;
+                                        
+                                    case 'query':
+                                        streamingStatus.innerHTML = `📡 Probando: "${data.query}"`;
+                                        break;
+                                        
+                                    case 'found':
+                                        streamingStatus.innerHTML = `📡 Encontrados ${data.count} con "${data.query}"`;
+                                        break;
+                                        
+                                    case 'waiting':
+                                        streamingStatus.innerHTML = `⏳ ${data.message}`;
+                                        break;
+                                        
+                                    case 'page':
+                                        streamingStatus.innerHTML = `📄 Página ${data.page}: ${data.count} resultados`;
+                                        break;
+                                        
+                                    case 'processing':
+                                        streamingStatus.innerHTML = `📊 Procesando ${data.total} lugares...`;
+                                        break;
+                                        
+                                    case 'batch':
+                                        streamingStatus.innerHTML = `📦 Lote ${data.start}-${data.end}`;
+                                        break;
+                                        
+                                    case 'processing_one':
+                                        streamingStatus.innerHTML = `🔍 Procesando ${data.current}/${data.total}: ${data.name}`;
+                                        break;
+                                        
+                                    case 'lead':
+                                        // LLEGÓ UN NUEVO LEAD - agregarlo a la tabla
+                                        leads.push(data.lead);
+                                        renderTable();
+                                        document.getElementById('stats').innerText = `${leads.length} RESULTADOS`;
+                                        document.getElementById('resultadosCount').innerText = leads.length;
+                                        break;
+                                        
+                                    case 'pause':
+                                        streamingStatus.innerHTML = `⏸️ ${data.message}`;
+                                        break;
+                                        
+                                    case 'stopped':
+                                        streamingStatus.innerHTML = `🛑 ${data.message}`;
+                                        actualizarEstadoBusqueda(false);
+                                        mostrarNotificacion('🛑 Búsqueda detenida', 'warning');
+                                        break;
+                                        
+                                    case 'error':
+                                        mostrarNotificacion(`⚠️ ${data.message}`, 'warning');
+                                        streamingStatus.innerHTML = `⚠️ Error: ${data.message}`;
+                                        break;
+                                        
+                                    case 'complete':
+                                        streamingStatus.innerHTML = `✅ Búsqueda completada: ${data.total} resultados`;
+                                        document.getElementById('stats').innerText = `${data.total} RESULTADOS`;
+                                        document.getElementById('resultadosCount').innerText = data.total;
+                                        actualizarEstadoBusqueda(false);
+                                        
+                                        if (data.total > 0) {
+                                            document.getElementById('btnAnalizarIA').classList.remove('hidden');
+                                            mostrarNotificacion(`✅ ${data.total} comercios encontrados`, 'success');
+                                        } else {
+                                            mostrarNotificacion('⚠️ No se encontraron resultados', 'warning');
+                                        }
+                                        btn.innerHTML = '<i class="fa-solid fa-search"></i>';
+                                        btn.disabled = false;
+                                        currentController = null;
+                                        break;
+                                        
+                                    case 'fatal_error':
+                                        mostrarNotificacion(`❌ ${data.message}`, 'error');
+                                        streamingStatus.innerHTML = `❌ Error: ${data.message}`;
+                                        actualizarEstadoBusqueda(false);
+                                        btn.innerHTML = '<i class="fa-solid fa-search"></i>';
+                                        btn.disabled = false;
+                                        currentController = null;
+                                        break;
                                 }
-                                btn.innerHTML = '<i class="fa-solid fa-search"></i>';
-                                btn.disabled = false;
-                                eventSourceActual.close();
-                                eventSourceActual = null;
-                                break;
-                                
-                            case 'fatal_error':
-                                mostrarNotificacion(`❌ ${data.message}`, 'error');
-                                streamingStatus.innerHTML = `❌ Error: ${data.message}`;
-                                actualizarEstadoBusqueda(false);
-                                btn.innerHTML = '<i class="fa-solid fa-search"></i>';
-                                btn.disabled = false;
-                                eventSourceActual.close();
-                                eventSourceActual = null;
-                                break;
+                            } catch(e) {
+                                console.error('Error parseando streaming:', e);
+                            }
                         }
-                    } catch(e) {
-                        console.error('Error parseando streaming:', e);
                     }
-                };
-                
-                eventSourceActual.onerror = function(e) {
-                    console.error('EventSource error:', e);
-                    streamingStatus.innerHTML = '❌ Error de conexión';
-                    actualizarEstadoBusqueda(false);
-                    btn.innerHTML = '<i class="fa-solid fa-search"></i>';
-                    btn.disabled = false;
-                    eventSourceActual.close();
-                    eventSourceActual = null;
-                };
-                
+                }
             } catch(e) {
-                console.error('Error en búsqueda:', e);
-                mostrarNotificacion('❌ Error de conexión con el servidor', 'error');
-                streamingStatus.innerHTML = '❌ Error de conexión';
-                leads = [];
-                renderTable();
-                document.getElementById('stats').innerText = 'ERROR CONEXIÓN';
-                document.getElementById('resultadosCount').innerText = '0';
+                if (e.name === 'AbortError') {
+                    console.log('Búsqueda cancelada por el usuario');
+                    streamingStatus.innerHTML = '🛑 Búsqueda cancelada';
+                } else {
+                    console.error('Error en búsqueda:', e);
+                    mostrarNotificacion('❌ Error de conexión con el servidor', 'error');
+                    streamingStatus.innerHTML = '❌ Error de conexión';
+                    leads = [];
+                    renderTable();
+                    document.getElementById('stats').innerText = 'ERROR CONEXIÓN';
+                    document.getElementById('resultadosCount').innerText = '0';
+                }
                 actualizarEstadoBusqueda(false);
                 btn.innerHTML = '<i class="fa-solid fa-search"></i>';
                 btn.disabled = false;
+                currentController = null;
             }
         }
 
@@ -1297,7 +1312,7 @@ Juan Ignacio Lewczuk
             }
         }
 
-        // ========== AUTO REVELAR EMAILS CON IA (AHORA USA LA NUEVA FUNCIÓN) ==========
+        // ========== AUTO REVELAR EMAILS CON IA ==========
         async function autoRevelarEmails() {
             if (revelandoEmails) return;
             revelandoEmails = true;
