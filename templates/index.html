@@ -293,6 +293,58 @@
             color: #ef4444;
             border: 1px solid #ef4444;
         }
+        .status-paused {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+            border: 1px solid #f59e0b;
+        }
+        
+        /* MODAL DE CONFIRMACIÓN */
+        .confirm-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(4px);
+            z-index: 10002;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .confirm-content {
+            background: #0f172a;
+            border: 2px solid #10b981;
+            border-radius: 24px;
+            padding: 30px;
+            max-width: 400px;
+            text-align: center;
+        }
+        .confirm-buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 25px;
+            justify-content: center;
+        }
+        .btn-confirm-yes {
+            background: #10b981;
+            color: white;
+            padding: 12px 30px;
+            border-radius: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+        }
+        .btn-confirm-no {
+            background: #ef4444;
+            color: white;
+            padding: 12px 30px;
+            border-radius: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+        }
     </style>
 </head>
 <body class="bg-[#020617] text-slate-200 font-sans overflow-hidden">
@@ -670,6 +722,23 @@ Juan Ignacio Lewczuk
         </div>
     </div>
 
+    <!-- MODAL DE CONFIRMACIÓN PARA GUARDAR BÚSQUEDA -->
+    <div id="confirmSaveModal" class="confirm-modal" style="display: none;">
+        <div class="confirm-content">
+            <i class="fa-solid fa-floppy-disk text-emerald-500 text-4xl mb-4"></i>
+            <h3 class="text-xl font-bold text-white mb-3">¿Desea guardar la búsqueda?</h3>
+            <p class="text-sm text-slate-300 mb-6">Los resultados encontrados hasta ahora se mantendrán y al reanudar continuará desde donde se detuvo.</p>
+            <div class="confirm-buttons">
+                <button onclick="guardarBusqueda(true)" class="btn-confirm-yes">
+                    <i class="fa-solid fa-check mr-2"></i>SÍ, Guardar
+                </button>
+                <button onclick="guardarBusqueda(false)" class="btn-confirm-no">
+                    <i class="fa-solid fa-times mr-2"></i>NO, Descartar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- TUTORIAL EXTENSIVO -->
     <div id="tutorialOverlay" class="tutorial-overlay"></div>
 
@@ -685,6 +754,8 @@ Juan Ignacio Lewczuk
         
         // NUEVAS VARIABLES PARA CONTROL DE BÚSQUEDA
         let busquedaActiva = true;
+        let busquedaPausada = false;
+        let busquedaGuardada = false;
         let currentController = null; // Para controlar fetch/streaming
         
         // VARIABLES PARA GMAIL
@@ -733,8 +804,11 @@ Juan Ignacio Lewczuk
         ];
 
         // ========== NUEVAS FUNCIONES PARA CONTROL DE BÚSQUEDA ==========
-        function actualizarEstadoBusqueda(activa) {
+        function actualizarEstadoBusqueda(activa, pausada, guardada) {
             busquedaActiva = activa;
+            busquedaPausada = pausada;
+            busquedaGuardada = guardada;
+            
             const statusBadge = document.getElementById('search-status-badge');
             const btnDetener = document.getElementById('btnDetener');
             const btnReanudar = document.getElementById('btnReanudar');
@@ -746,11 +820,17 @@ Juan Ignacio Lewczuk
                 btnDetener.disabled = false;
                 btnReanudar.disabled = true;
                 btnBuscar.disabled = true;
+            } else if (pausada) {
+                statusBadge.className = 'status-badge status-paused';
+                statusBadge.innerHTML = '<i class="fa-solid fa-pause"></i> Pausada' + (guardada ? ' (Guardada)' : '');
+                btnDetener.disabled = true;
+                btnReanudar.disabled = false;
+                btnBuscar.disabled = false;
             } else {
                 statusBadge.className = 'status-badge status-stopped';
                 statusBadge.innerHTML = '<i class="fa-solid fa-circle"></i> Detenido';
                 btnDetener.disabled = true;
-                btnReanudar.disabled = false;
+                btnReanudar.disabled = true;
                 btnBuscar.disabled = false;
             }
         }
@@ -769,13 +849,38 @@ Juan Ignacio Lewczuk
             .then(response => response.json())
             .then(data => {
                 console.log('Búsqueda detenida:', data);
-                actualizarEstadoBusqueda(false);
-                document.getElementById('streamingStatus').innerHTML = '🛑 Búsqueda detenida por usuario';
-                mostrarNotificacion('🛑 Búsqueda detenida', 'warning');
+                // Mostrar modal de confirmación
+                document.getElementById('confirmSaveModal').style.display = 'flex';
             })
             .catch(error => {
                 console.error('Error deteniendo búsqueda:', error);
                 mostrarNotificacion('❌ Error al detener búsqueda', 'error');
+            });
+        }
+
+        function guardarBusqueda(guardar) {
+            document.getElementById('confirmSaveModal').style.display = 'none';
+            
+            fetch('/save_search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ guardar: guardar })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (guardar) {
+                    mostrarNotificacion('💾 Búsqueda guardada', 'success');
+                } else {
+                    leads = []; // Limpiar resultados si no se guarda
+                    renderTable();
+                    mostrarNotificacion('🗑️ Resultados descartados', 'info');
+                }
+                actualizarEstadoBusqueda(false, true, guardar);
+                document.getElementById('streamingStatus').innerHTML = guardar ? '⏸️ Búsqueda pausada (guardada)' : '⏸️ Búsqueda pausada (resultados descartados)';
+            })
+            .catch(error => {
+                console.error('Error guardando búsqueda:', error);
+                mostrarNotificacion('❌ Error al guardar búsqueda', 'error');
             });
         }
 
@@ -787,8 +892,6 @@ Juan Ignacio Lewczuk
             .then(response => response.json())
             .then(data => {
                 console.log('Búsqueda reanudada:', data);
-                actualizarEstadoBusqueda(true);
-                mostrarNotificacion('▶️ Búsqueda reanudada', 'success');
                 // Si hay una zona ingresada, reiniciar búsqueda
                 const zona = document.getElementById('zona').value;
                 if (zona) {
@@ -805,7 +908,7 @@ Juan Ignacio Lewczuk
             fetch('/search_status')
                 .then(res => res.json())
                 .then(data => {
-                    actualizarEstadoBusqueda(data.activa);
+                    actualizarEstadoBusqueda(data.activa, data.pausada, data.guardada);
                 })
                 .catch(error => console.error('Error verificando estado:', error));
         }
@@ -1125,7 +1228,6 @@ Juan Ignacio Lewczuk
             if(!zonaInput) return;
             
             cancelarTodasLasPeticionesIA();
-            revelandoEmails = false;
             
             // Cancelar fetch anterior si existe
             if (currentController) {
@@ -1141,15 +1243,18 @@ Juan Ignacio Lewczuk
             streamingStatus.classList.remove('hidden');
             streamingStatus.innerHTML = '📡 Iniciando búsqueda...';
             
-            // Limpiar resultados anteriores
-            leads = [];
-            renderTable();
+            // Limpiar resultados anteriores solo si no hay búsqueda guardada
+            if (!busquedaGuardada) {
+                leads = [];
+                renderTable();
+            }
+            
             document.getElementById('stats').innerText = 'BUSCANDO...';
-            document.getElementById('resultadosCount').innerText = '0';
+            document.getElementById('resultadosCount').innerText = leads.length;
             document.getElementById('btnAnalizarIA').classList.add('hidden');
             
             // Actualizar estado a activo
-            actualizarEstadoBusqueda(true);
+            actualizarEstadoBusqueda(true, false, busquedaGuardada);
             
             // Crear nuevo AbortController para esta búsqueda
             currentController = new AbortController();
@@ -1214,6 +1319,10 @@ Juan Ignacio Lewczuk
                                         streamingStatus.innerHTML = `📦 Lote ${data.start}-${data.end}`;
                                         break;
                                         
+                                    case 'info':
+                                        streamingStatus.innerHTML = `ℹ️ ${data.message}`;
+                                        break;
+                                        
                                     case 'processing_one':
                                         streamingStatus.innerHTML = `🔍 Procesando ${data.current}/${data.total}: ${data.name}`;
                                         break;
@@ -1230,10 +1339,10 @@ Juan Ignacio Lewczuk
                                         streamingStatus.innerHTML = `⏸️ ${data.message}`;
                                         break;
                                         
-                                    case 'stopped':
-                                        streamingStatus.innerHTML = `🛑 ${data.message}`;
-                                        actualizarEstadoBusqueda(false);
-                                        mostrarNotificacion('🛑 Búsqueda detenida', 'warning');
+                                    case 'paused':
+                                        streamingStatus.innerHTML = `⏸️ ${data.message}`;
+                                        actualizarEstadoBusqueda(false, true, busquedaGuardada);
+                                        mostrarNotificacion('⏸️ Búsqueda pausada', 'warning');
                                         break;
                                         
                                     case 'error':
@@ -1245,7 +1354,7 @@ Juan Ignacio Lewczuk
                                         streamingStatus.innerHTML = `✅ Búsqueda completada: ${data.total} resultados`;
                                         document.getElementById('stats').innerText = `${data.total} RESULTADOS`;
                                         document.getElementById('resultadosCount').innerText = data.total;
-                                        actualizarEstadoBusqueda(false);
+                                        actualizarEstadoBusqueda(false, false, false);
                                         
                                         if (data.total > 0) {
                                             document.getElementById('btnAnalizarIA').classList.remove('hidden');
@@ -1261,7 +1370,7 @@ Juan Ignacio Lewczuk
                                     case 'fatal_error':
                                         mostrarNotificacion(`❌ ${data.message}`, 'error');
                                         streamingStatus.innerHTML = `❌ Error: ${data.message}`;
-                                        actualizarEstadoBusqueda(false);
+                                        actualizarEstadoBusqueda(false, false, false);
                                         btn.innerHTML = '<i class="fa-solid fa-search"></i>';
                                         btn.disabled = false;
                                         currentController = null;
@@ -1286,7 +1395,7 @@ Juan Ignacio Lewczuk
                     document.getElementById('stats').innerText = 'ERROR CONEXIÓN';
                     document.getElementById('resultadosCount').innerText = '0';
                 }
-                actualizarEstadoBusqueda(false);
+                actualizarEstadoBusqueda(false, false, false);
                 btn.innerHTML = '<i class="fa-solid fa-search"></i>';
                 btn.disabled = false;
                 currentController = null;
