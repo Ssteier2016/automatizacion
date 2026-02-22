@@ -40,6 +40,9 @@ CORS(app)
 app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+# ========== VARIABLE GLOBAL PARA CONTROLAR DETENCIÓN DE BÚSQUEDAS ==========
+busqueda_activa = True
+
 # ========== CONFIGURACIÓN DESDE VARIABLES DE ENTORNO ==========
 # Configuración OAuth de Gmail
 SCOPES = ['https://www.googleapis.com/auth/gmail.send']
@@ -416,13 +419,36 @@ def validar_email(email):
     patron = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return bool(re.match(patron, email))
 
-def buscar_email_con_ia(nombre, direccion, redes=None):
+def extraer_redes_desde_texto(texto):
+    """Extrae URLs de redes sociales desde texto."""
+    redes = {"facebook": "", "instagram": "", "twitter": "", "linkedin": "", "tiktok": ""}
+    
+    # Patrones para detectar redes sociales
+    patrones = {
+        'facebook': r'(?:https?:\/\/)?(?:www\.)?facebook\.com\/[a-zA-Z0-9.]+',
+        'instagram': r'(?:https?:\/\/)?(?:www\.)?instagram\.com\/[a-zA-Z0-9._]+',
+        'twitter': r'(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com)\/[a-zA-Z0-9_]+',
+        'linkedin': r'(?:https?:\/\/)?(?:www\.)?linkedin\.com\/(?:company|in)\/[a-zA-Z0-9-]+',
+        'tiktok': r'(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@[a-zA-Z0-9._]+'
+    }
+    
+    for red, patron in patrones.items():
+        encontrado = re.search(patron, texto, re.IGNORECASE)
+        if encontrado:
+            url = encontrado.group(0)
+            if not url.startswith('http'):
+                url = 'https://' + url
+            redes[red] = url
+    
+    return redes
+
+def buscar_info_con_ia(nombre, direccion, web_content="", redes=None):
     """
-    Usa Gemini para buscar email basado en nombre, dirección y redes.
-    Controla el rate limiting automáticamente.
+    Usa Gemini para buscar email y redes sociales basado en toda la información disponible.
+    Totalmente automático - busca email, Instagram, Facebook y otras redes.
     """
     if not GEMINI_API_KEY:
-        return ""
+        return {"email": "", "instagram": "", "facebook": "", "otras_redes": {}}
     
     # Verificar si podemos hacer la consulta
     can_request, wait_time = gemini_limiter.can_make_request()
@@ -430,55 +456,111 @@ def buscar_email_con_ia(nombre, direccion, redes=None):
         if wait_time:
             logger.info(f"⏳ Esperando {wait_time:.1f}s por límite de Gemini...")
             time.sleep(wait_time)
-            # Verificar de nuevo después de esperar
-            can_request, _ = gemini_limiter.can_make_request()
-            if not can_request:
-                logger.warning("❌ No se puede hacer consulta a Gemini después de esperar")
-                return ""
         else:
             logger.warning("❌ Límite diario de Gemini alcanzado")
-            return ""
+            return {"email": "", "instagram": "", "facebook": "", "otras_redes": {}}
     
-    prompt = f"Negocio: {nombre}. Ubicación: {direccion}."
-    if redes:
-        if redes.get('instagram'):
-            prompt += f" Instagram: {redes['instagram']}."
-        if redes.get('facebook'):
-            prompt += f" Facebook: {redes['facebook']}."
+    # Construir prompt detallado para que la IA busque todo
+    prompt = f"""Analiza la siguiente información de un negocio y extrae TODOS los datos de contacto disponibles:
+
+NEGOCIO: {nombre}
+UBICACIÓN: {direccion}
+
+"""
+
+    if web_content:
+        # Limitar el contenido web para no exceder tokens
+        web_resumido = web_content[:1000] + "..." if len(web_content) > 1000 else web_content
+        prompt += f"CONTENIDO DEL SITIO WEB:\n{web_resumido}\n\n"
     
-    prompt += " Basado en esta información, ¿cuál es el email de contacto para ventas mayoristas? Responde SOLO el email, o 'No encontrado' si no sabes."
+    if redes and any(redes.values()):
+        prompt += "REDES SOCIALES ENCONTRADAS EN SCRAPING:\n"
+        for red, url in redes.items():
+            if url:
+                prompt += f"- {red}: {url}\n"
+        prompt += "\n"
+    
+    prompt += """Basado en TODA esta información, extrae:
+
+1. EMAIL de contacto (para ventas mayoristas o contacto comercial)
+2. INSTAGRAM oficial del negocio
+3. FACEBOOK oficial del negocio
+4. OTRAS REDES SOCIALES (Twitter/X, LinkedIn, TikTok, YouTube, etc.)
+
+Responde SOLO en formato JSON con esta estructura exacta:
+{
+    "email": "email encontrado o vacío",
+    "instagram": "url de instagram o vacío", 
+    "facebook": "url de facebook o vacío",
+    "otras_redes": {
+        "twitter": "url o vacío",
+        "linkedin": "url o vacío",
+        "tiktok": "url o vacío",
+        "youtube": "url o vacío"
+    }
+}
+
+Si no encuentras algo, déjalo vacío. NO añadas texto adicional, SOLO el JSON."""
     
     try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 50}
+            "generationConfig": {
+                "temperature": 0.1,  # Baja temperatura para respuestas más precisas
+                "maxOutputTokens": 300
+            }
         }
         
-        # Registrar que vamos a hacer la consulta
+        # Registrar la consulta
         gemini_limiter.record_request()
         
-        res = requests.post(url, json=payload, timeout=5)
+        res = requests.post(url, json=payload, timeout=8)
         if res.status_code == 200:
             result = res.json()
             if 'candidates' in result and len(result['candidates']) > 0:
                 text = result['candidates'][0]['content']['parts'][0]['text'].strip()
-                if '@' in text and validar_email(text):
-                    logger.info(f"✅ Gemini encontró email: {text}")
-                    return text.lower()
-        else:
-            logger.warning(f"⚠️ Gemini respondió con código {res.status_code}")
-            
-    except requests.Timeout:
-        logger.warning("⏱️ Timeout en consulta a Gemini")
+                
+                # Intentar extraer JSON de la respuesta
+                try:
+                    # Buscar JSON en la respuesta (por si la IA añade texto)
+                    json_match = re.search(r'\{.*\}', text, re.DOTALL)
+                    if json_match:
+                        data = json.loads(json_match.group())
+                    else:
+                        data = json.loads(text)
+                    
+                    # Validar y limpiar resultados
+                    resultado = {
+                        "email": data.get("email", ""),
+                        "instagram": data.get("instagram", ""),
+                        "facebook": data.get("facebook", ""),
+                        "otras_redes": data.get("otras_redes", {})
+                    }
+                    
+                    # Validar email si existe
+                    if resultado["email"] and not validar_email(resultado["email"]):
+                        resultado["email"] = ""
+                    
+                    logger.info(f"✅ IA encontró: Email: {bool(resultado['email'])}, IG: {bool(resultado['instagram'])}, FB: {bool(resultado['facebook'])}")
+                    return resultado
+                    
+                except json.JSONDecodeError:
+                    logger.warning(f"⚠️ No se pudo parsear JSON de respuesta IA: {text[:100]}")
+        
+        logger.warning(f"⚠️ IA no pudo extraer información")
+        
     except Exception as e:
-        logger.error(f"❌ Error en consulta a Gemini: {e}")
+        logger.error(f"❌ Error en consulta a IA: {e}")
     
-    return ""
+    return {"email": "", "instagram": "", "facebook": "", "otras_redes": {}}
 
-def scraping_profundo_contacto(url_base, usar_ia=False, nombre="", direccion=""):
-    """Busca emails y redes sociales con timeout corto. Puede usar IA para encontrar emails."""
-    info = {"email": "", "facebook": "", "instagram": ""}
+def scraping_profundo_contacto(url_base, usar_ia=True, nombre="", direccion=""):
+    """
+    Busca emails y redes sociales con timeout corto.
+    IA automática - siempre busca sin necesidad de clics.
+    """
+    info = {"email": "", "facebook": "", "instagram": "", "otras_redes": {}}
     if not url_base or not url_base.startswith('http'):
         return info
     
@@ -489,14 +571,17 @@ def scraping_profundo_contacto(url_base, usar_ia=False, nombre="", direccion="")
         'Connection': 'keep-alive',
     }
     
+    web_content = ""
+    
     try:
-        res = requests.get(url_base, timeout=3, headers=headers, allow_redirects=True)
+        res = requests.get(url_base, timeout=4, headers=headers, allow_redirects=True)
         if res.status_code != 200: 
             return info
         
         texto_pagina = res.text
+        web_content = texto_pagina
         
-        # Buscar emails
+        # ===== 1. BUSCAR EMAILS CON REGEX =====
         email_patterns = [
             r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
             r'email["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
@@ -513,25 +598,82 @@ def scraping_profundo_contacto(url_base, usar_ia=False, nombre="", direccion="")
             if info["email"]:
                 break
         
-        # Buscar redes sociales
+        # ===== 2. BUSCAR REDES SOCIALES CON BEAUTIFUL SOUP =====
         soup = BeautifulSoup(texto_pagina, 'html.parser')
+        
+        # Buscar enlaces a redes sociales
         for a in soup.find_all('a', href=True):
             href = a['href'].lower()
-            if 'facebook.com' in href and not info["facebook"]:
-                info["facebook"] = a['href']
-            if 'instagram.com' in href and not info["instagram"]:
-                info["instagram"] = a['href']
-            if info["facebook"] and info["instagram"]:
-                break
+            texto_enlace = a.get_text().lower()
+            
+            # Facebook
+            if ('facebook.com' in href or 'fb.com' in href or 'facebook' in texto_enlace) and not info["facebook"]:
+                info["facebook"] = a['href'] if a['href'].startswith('http') else urljoin(url_base, a['href'])
+            
+            # Instagram
+            if ('instagram.com' in href or 'instagr.am' in href or 'instagram' in texto_enlace) and not info["instagram"]:
+                info["instagram"] = a['href'] if a['href'].startswith('http') else urljoin(url_base, a['href'])
+            
+            # Twitter/X
+            if ('twitter.com' in href or 'x.com' in href or 'twitter' in texto_enlace):
+                if 'otras_redes' not in info:
+                    info['otras_redes'] = {}
+                url_twitter = a['href'] if a['href'].startswith('http') else urljoin(url_base, a['href'])
+                info['otras_redes']['twitter'] = url_twitter
+            
+            # LinkedIn
+            if ('linkedin.com' in href or 'linkedin' in texto_enlace):
+                if 'otras_redes' not in info:
+                    info['otras_redes'] = {}
+                url_linkedin = a['href'] if a['href'].startswith('http') else urljoin(url_base, a['href'])
+                info['otras_redes']['linkedin'] = url_linkedin
+            
+            # TikTok
+            if ('tiktok.com' in href or 'tiktok' in texto_enlace):
+                if 'otras_redes' not in info:
+                    info['otras_redes'] = {}
+                url_tiktok = a['href'] if a['href'].startswith('http') else urljoin(url_base, a['href'])
+                info['otras_redes']['tiktok'] = url_tiktok
         
-        # Si no encontramos email pero tenemos IA, intentamos buscarlo con Gemini
-        # Ahora va de a una por una y controla límites
-        if not info["email"] and usar_ia and GEMINI_API_KEY:
-            # Pequeña pausa entre consultas a Gemini para no saturar
-            time.sleep(1)
-            email_ia = buscar_email_con_ia(nombre, direccion, info)
-            if email_ia:
-                info["email"] = email_ia
+        # ===== 3. IA AUTOMÁTICA - SIEMPRE BUSCA (sin clics) =====
+        if usar_ia and GEMINI_API_KEY:
+            # Pequeña pausa entre consultas a Gemini
+            time.sleep(1.5)
+            
+            # Preparar redes encontradas para la IA
+            redes_encontradas = {
+                'facebook': info.get('facebook', ''),
+                'instagram': info.get('instagram', '')
+            }
+            if 'otras_redes' in info:
+                redes_encontradas.update(info['otras_redes'])
+            
+            # IA busca todo (email, instagram, facebook, otras redes)
+            info_ia = buscar_info_con_ia(
+                nombre, 
+                direccion, 
+                web_content=web_content[:2000],  # Limitar para no saturar
+                redes=redes_encontradas
+            )
+            
+            # Combinar resultados (priorizar IA para email, mantener scraping para URLs)
+            if info_ia.get('email') and not info['email']:
+                info['email'] = info_ia['email']
+            
+            # Para redes, combinar: lo que encontró scraping + lo que encontró IA
+            if info_ia.get('instagram') and not info.get('instagram'):
+                info['instagram'] = info_ia['instagram']
+            
+            if info_ia.get('facebook') and not info.get('facebook'):
+                info['facebook'] = info_ia['facebook']
+            
+            # Otras redes de la IA
+            if info_ia.get('otras_redes'):
+                if 'otras_redes' not in info:
+                    info['otras_redes'] = {}
+                for red, url in info_ia['otras_redes'].items():
+                    if url and not info['otras_redes'].get(red):
+                        info['otras_redes'][red] = url
                 
     except requests.Timeout:
         logger.debug(f"Timeout en scraping: {url_base}")
@@ -850,6 +992,33 @@ def get_producto_image():
         return send_file('producto.png', mimetype='image/png')
     return "Archivo producto.png no encontrado", 404
 
+# ========== RUTAS PARA CONTROLAR LA BÚSQUEDA ==========
+@app.route('/stop_search', methods=['POST'])
+def stop_search():
+    """Detiene la búsqueda actual."""
+    global busqueda_activa
+    busqueda_activa = False
+    logger.info("🛑 Búsqueda detenida por usuario")
+    return jsonify({'success': True, 'message': 'Búsqueda detenida'})
+
+@app.route('/resume_search', methods=['POST'])
+def resume_search():
+    """Reanuda la búsqueda."""
+    global busqueda_activa
+    busqueda_activa = True
+    logger.info("▶️ Búsqueda reanudada")
+    return jsonify({'success': True, 'message': 'Búsqueda reanudada'})
+
+@app.route('/search_status', methods=['GET'])
+def search_status():
+    """Devuelve el estado actual de la búsqueda."""
+    global busqueda_activa
+    return jsonify({
+        'activa': busqueda_activa,
+        'gemini': gemini_limiter.get_status(),
+        'google_maps': gmaps_limiter.get_status()
+    })
+
 # ========== RUTA PARA VER ESTADO DE LOS RATE LIMITERS ==========
 @app.route('/api_status', methods=['GET'])
 def api_status():
@@ -867,7 +1036,11 @@ def search_places_stream():
     Busca dietéticas en Google Maps y devuelve resultados en STREAMING.
     HASTA 40 RESULTADOS - Procesa en lotes de 5 para evitar timeouts.
     Incluye control de límites de Gemini y Google Maps automático.
+    IA automática - siempre busca sin necesidad de clics.
     """
+    global busqueda_activa
+    busqueda_activa = True  # Activar búsqueda al iniciar
+    
     data = request.json
     zona = data.get('zona')
 
@@ -878,6 +1051,8 @@ def search_places_stream():
         return jsonify({'success': False, 'error': 'Zona no especificada'}), 200
 
     def generate():
+        global busqueda_activa
+        
         yield f"data: {json.dumps({'status': 'start', 'message': f'Iniciando búsqueda en {zona}...'})}\n\n"
         
         # Enviar estado inicial de las APIs
@@ -900,6 +1075,11 @@ def search_places_stream():
                     yield f"data: {json.dumps({'status': 'warning', 'message': f'⏳ Esperando {wait_time:.1f}s por límite de Google Maps...'})}\n\n"
                     time.sleep(wait_time)
             
+            # Verificar si el usuario detuvo la búsqueda
+            if not busqueda_activa:
+                yield f"data: {json.dumps({'status': 'stopped', 'message': '🛑 Búsqueda detenida por usuario'})}\n\n"
+                return
+            
             # ===== 2. BÚSQUEDA INICIAL CON MÚLTIPLES QUERIES =====
             queries = [
                 f"dietetica en {zona}",
@@ -915,6 +1095,11 @@ def search_places_stream():
 
             # Probar queries hasta encontrar resultados
             for query in queries:
+                # Verificar si el usuario detuvo la búsqueda
+                if not busqueda_activa:
+                    yield f"data: {json.dumps({'status': 'stopped', 'message': '🛑 Búsqueda detenida por usuario'})}\n\n"
+                    return
+                
                 yield f"data: {json.dumps({'status': 'query', 'query': query})}\n\n"
                 
                 # Verificar límites antes de cada query
@@ -948,6 +1133,11 @@ def search_places_stream():
             # Primera página
             todos_los_places = response.get('results', [])
             yield f"data: {json.dumps({'status': 'page', 'page': 1, 'count': len(todos_los_places)})}\n\n"
+
+            # Verificar si el usuario detuvo la búsqueda
+            if not busqueda_activa:
+                yield f"data: {json.dumps({'status': 'stopped', 'message': '🛑 Búsqueda detenida por usuario'})}\n\n"
+                return
 
             # Segunda página (si existe)
             if 'next_page_token' in response and len(todos_los_places) < 40:
@@ -989,6 +1179,11 @@ def search_places_stream():
             detalles_procesados = 0
             
             for batch_start in range(0, total_places, BATCH_SIZE):
+                # Verificar si el usuario detuvo la búsqueda
+                if not busqueda_activa:
+                    yield f"data: {json.dumps({'status': 'stopped', 'message': '🛑 Búsqueda detenida por usuario'})}\n\n"
+                    break
+                
                 # Actualizar estado de las APIs
                 api_update = {
                     'status': 'api_update', 
@@ -1019,6 +1214,11 @@ def search_places_stream():
                 yield f"data: {json.dumps({'status': 'batch', 'start': batch_start+1, 'end': batch_end})}\n\n"
 
                 for idx in range(batch_start, batch_end):
+                    # Verificar si el usuario detuvo la búsqueda
+                    if not busqueda_activa:
+                        yield f"data: {json.dumps({'status': 'stopped', 'message': '🛑 Búsqueda detenida por usuario'})}\n\n"
+                        break
+                    
                     p = todos_los_places[idx]
                     try:
                         nombre_actual = p.get('name', 'Sin nombre')
@@ -1055,32 +1255,33 @@ def search_places_stream():
                             else:
                                 tel_clean = '54' + tel_clean
                         
-                        # Scraping para email y redes (con IA)
+                        # Scraping para email y redes (IA AUTOMÁTICA - siempre busca)
                         web = det.get('website', '')
-                        contacto = {"email": "", "facebook": "", "instagram": ""}
+                        contacto = {"email": "", "facebook": "", "instagram": "", "otras_redes": {}}
                         
                         if web:
                             try:
                                 # Pasar nombre y dirección para que la IA pueda ayudar
                                 contacto = scraping_profundo_contacto(
                                     web, 
-                                    usar_ia=True,
+                                    usar_ia=True,  # IA siempre activa
                                     nombre=det.get('name', ''),
                                     direccion=det.get('formatted_address', '')
                                 )
-                                if contacto.get('email'):
+                                if contacto.get('email') or contacto.get('instagram') or contacto.get('facebook'):
                                     gemini_consultas_realizadas += 1
-                            except:
-                                pass
+                            except Exception as e:
+                                logger.error(f"Error en scraping: {e}")
 
                         lead = {
                             'nombre': det.get('name', 'Sin nombre'),
                             'direccion': det.get('formatted_address', 'Sin dirección'),
                             'telefono': tel_clean[:15] if tel_clean else '',
                             'tel_display': tel_raw[:20] if tel_raw else 'No disponible',
-                            'email': contacto["email"] or '',
-                            'facebook': contacto["facebook"] or '',
-                            'instagram': contacto["instagram"] or '',
+                            'email': contacto.get('email', ''),
+                            'facebook': contacto.get('facebook', ''),
+                            'instagram': contacto.get('instagram', ''),
+                            'otras_redes': contacto.get('otras_redes', {}),
                             'web': web or ''
                         }
 
@@ -1110,7 +1311,7 @@ def search_places_stream():
                 
                 # Verificar si debemos continuar después del lote
                 can_detail, _, _ = gmaps_limiter.can_make_detail()
-                if not can_detail:
+                if not can_detail or not busqueda_activa:
                     break
                 
                 # Pausa entre lotes
