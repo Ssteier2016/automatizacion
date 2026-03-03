@@ -334,7 +334,7 @@ def scraping_profundo_contacto(url_base, exhaustivo=False):
             if 'facebook.com' in href and not info["facebook"]:
                 info["facebook"] = a['href']
             if 'instagram.com' in href and not info["instagram"]:
-                info["instagram"] = a['href"]
+                info["instagram"] = a['href']
             if info["facebook"] and info["instagram"]:
                 break
         
