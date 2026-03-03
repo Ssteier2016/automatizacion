@@ -868,6 +868,7 @@ def download_csv():
     return "Archivo no encontrado", 404
 
 # ========== RUTA DE IA ==========
+# ========== RUTA DE IA ==========
 @app.route('/api/ai_query', methods=['POST'])
 def ai_query():
     """Proxy para Gemini API."""
@@ -888,7 +889,13 @@ def ai_query():
     elif "mensaje" in prompt.lower():
         default_response = "Hola {nombre}, te comparto nuestra lista de precios mayorista de Yerba Mate Soberanía. ¿Te interesaría recibirla?"
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+    # CORREGIDO: Usar el modelo correcto de Gemini
+    # Intentar con diferentes versiones del modelo
+    modelos = [
+        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={GEMINI_API_KEY}",
+        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent?key={GEMINI_API_KEY}",
+        f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+    ]
     
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
@@ -902,23 +909,28 @@ def ai_query():
     if system_instruction:
         payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
 
-    try:
-        logger.info(f"Consultando Gemini API...")
-        res = requests.post(url, json=payload, timeout=timeout)
-        
-        if res.status_code == 200:
-            result = res.json()
-            if 'candidates' in result and len(result['candidates']) > 0:
-                text = result['candidates'][0]['content']['parts'][0]['text']
-                logger.info("✅ Respuesta recibida de Gemini")
-                return jsonify({'text': text})
-        
-        logger.warning(f"Gemini respondió con {res.status_code}")
-        return jsonify({'text': default_response})
-        
-    except Exception as e:
-        logger.error(f"Error en ai_query: {e}")
-        return jsonify({'text': default_response})
+    # Probar cada modelo hasta que uno funcione
+    for url in modelos:
+        try:
+            logger.info(f"Consultando Gemini API con URL: {url.split('?')[0]}...")
+            res = requests.post(url, json=payload, timeout=timeout)
+            
+            if res.status_code == 200:
+                result = res.json()
+                if 'candidates' in result and len(result['candidates']) > 0:
+                    text = result['candidates'][0]['content']['parts'][0]['text']
+                    logger.info("✅ Respuesta recibida de Gemini")
+                    return jsonify({'text': text})
+            else:
+                logger.warning(f"Gemini respondió con {res.status_code} para esta URL")
+                
+        except Exception as e:
+            logger.warning(f"Error con modelo: {e}")
+            continue
+    
+    # Si todos fallan, usar respuesta por defecto
+    logger.warning("Todos los modelos de Gemini fallaron, usando respuesta por defecto")
+    return jsonify({'text': default_response})
 
 # ========== RUTA DE DIAGNÓSTICO ==========
 @app.route('/debug/keys', methods=['GET'])
