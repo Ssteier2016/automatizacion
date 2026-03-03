@@ -26,6 +26,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+import traceback
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -34,7 +35,8 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 # Clave secreta desde variable de entorno
 app.secret_key = os.environ.get('SECRET_KEY', 'clave-por-defecto-cambiar')
-CORS(app)
+# Configurar CORS correctamente
+CORS(app, supports_credentials=True, origins=["*"])
 
 app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -72,10 +74,11 @@ logger.info(f"📌 GMAIL_CLIENT_ID: {'✅ Configurada' if GOOGLE_CLIENT_ID else 
 logger.info(f"📌 REDIRECT_URI: {REDIRECT_URI}")
 logger.info("=" * 50)
 
-# Inicializar Google Maps client
+# Inicializar Google Maps client con manejo de errores mejorado
+gmaps = None
 try:
     if GOOGLE_MAPS_KEY:
-        gmaps = googlemaps.Client(key=GOOGLE_MAPS_KEY, timeout=10)
+        gmaps = googlemaps.Client(key=GOOGLE_MAPS_KEY, timeout=10, retry_timeout=2, max_retries=2)
         # Test rápido
         try:
             test = gmaps.geocode("Buenos Aires")
@@ -84,7 +87,6 @@ try:
             logger.error(f"❌ Google Maps API test falló: {e}")
             gmaps = None
     else:
-        gmaps = None
         logger.error("❌ Maps_KEY no está configurada")
 except Exception as e:
     logger.error(f"❌ Error inicializando Google Maps: {e}")
@@ -93,8 +95,9 @@ except Exception as e:
 # ========== FUNCIONES AUXILIARES ==========
 def validar_email(email):
     """Valida formato de email."""
-    if not email:
+    if not email or not isinstance(email, str):
         return False
+    email = email.strip()
     patron = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return bool(re.match(patron, email))
 
@@ -105,20 +108,19 @@ def buscar_emails_con_ia(texto_pagina, url):
     
     try:
         # Limitar el texto para no sobrecargar la IA
-        texto_limitado = texto_pagina[:5000]  # Primeros 5000 caracteres
+        texto_limitado = texto_pagina[:3000]  # Reducido a 3000 caracteres para mejor rendimiento
         
-        prompt = f"""Analiza el siguiente texto HTML de una página web y extrae ÚNICAMENTE direcciones de email válidas que encuentres.
+        prompt = f"""Analiza el siguiente texto de una página web y extrae ÚNICAMENTE una dirección de email válida si existe.
         La URL es: {url}
         
         Texto de la página:
         {texto_limitado}
         
         Instrucciones:
-        1. Busca patrones de email en todo el texto
-        2. Ignora emails que parezcan ser imágenes (con extensiones .png, .jpg, .gif)
-        3. Ignora emails que parezcan ser parte de código CSS/JS
-        4. Si encuentras múltiples emails, devuelve el que parezca más relevante para contacto
-        5. Si no encuentras ningún email, responde exactamente: "NO_EMAIL_ENCONTRADO"
+        1. Busca un email que parezca de contacto (info@, contacto@, ventas@, etc.)
+        2. Ignora emails falsos o con extensiones de imagen
+        3. Si encuentras múltiples emails, elige el más relevante para contacto
+        4. Si no encuentras ningún email, responde exactamente: "NO_EMAIL"
         
         Email encontrado:"""
         
@@ -128,18 +130,18 @@ def buscar_emails_con_ia(texto_pagina, url):
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.1,
-                "maxOutputTokens": 50,
+                "maxOutputTokens": 30,
                 "topP": 0.8
             }
         }
         
-        res = requests.post(url_ia, json=payload, timeout=5)
+        res = requests.post(url_ia, json=payload, timeout=3)  # Timeout reducido
         
         if res.status_code == 200:
             result = res.json()
             if 'candidates' in result and len(result['candidates']) > 0:
                 email_encontrado = result['candidates'][0]['content']['parts'][0]['text'].strip()
-                if email_encontrado != "NO_EMAIL_ENCONTRADO" and validar_email(email_encontrado):
+                if email_encontrado != "NO_EMAIL" and validar_email(email_encontrado):
                     logger.info(f"✅ IA encontró email: {email_encontrado}")
                     return email_encontrado.lower()
     except Exception as e:
@@ -153,22 +155,16 @@ def buscar_redes_con_ia(texto_pagina, url):
         return {"facebook": "", "instagram": ""}
     
     try:
-        texto_limitado = texto_pagina[:4000]
+        texto_limitado = texto_pagina[:3000]
         
-        prompt = f"""Analiza el siguiente texto HTML de una página web y extrae los enlaces a redes sociales.
-        La URL es: {url}
+        prompt = f"""Analiza el siguiente texto y encuentra enlaces a Facebook e Instagram.
+        URL: {url}
         
-        Texto de la página:
+        Texto:
         {texto_limitado}
         
-        Busca específicamente:
-        1. Enlaces a Facebook (que contengan facebook.com)
-        2. Enlaces a Instagram (que contengan instagram.com)
-        
-        Devuelve SOLO un objeto JSON con este formato exacto:
-        {{"facebook": "URL_COMPLETA_DE_FACEBOOK o vacío si no hay", "instagram": "URL_COMPLETA_DE_INSTAGRAM o vacío si no hay"}}
-        
-        No incluyas texto adicional, solo el JSON."""
+        Devuelve SOLO un JSON con este formato exacto:
+        {{"facebook": "url_completa_de_facebook o vacío", "instagram": "url_completa_de_instagram o vacío"}}"""
         
         url_ia = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
         
@@ -176,26 +172,22 @@ def buscar_redes_con_ia(texto_pagina, url):
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.1,
-                "maxOutputTokens": 150,
+                "maxOutputTokens": 100,
                 "topP": 0.8
             }
         }
         
-        res = requests.post(url_ia, json=payload, timeout=5)
+        res = requests.post(url_ia, json=payload, timeout=3)
         
         if res.status_code == 200:
             result = res.json()
             if 'candidates' in result and len(result['candidates']) > 0:
                 texto_respuesta = result['candidates'][0]['content']['parts'][0]['text']
-                # Intentar extraer JSON de la respuesta
                 import json as json_lib
                 try:
-                    # Buscar el JSON en la respuesta
                     match = re.search(r'\{.*\}', texto_respuesta, re.DOTALL)
                     if match:
-                        redes = json_lib.loads(match.group())
-                        logger.info(f"✅ IA encontró redes: FB: {bool(redes.get('facebook'))}, IG: {bool(redes.get('instagram'))}")
-                        return redes
+                        return json_lib.loads(match.group())
                 except:
                     pass
     except Exception as e:
@@ -209,7 +201,7 @@ def scraping_profundo_contacto(url_base, exhaustivo=False):
     Utiliza IA para mejorar la detección.
     """
     info = {"email": "", "facebook": "", "instagram": ""}
-    if not url_base or not url_base.startswith('http'):
+    if not url_base or not isinstance(url_base, str) or not url_base.startswith(('http://', 'https://')):
         return info
     
     headers = {
@@ -220,114 +212,58 @@ def scraping_profundo_contacto(url_base, exhaustivo=False):
     }
     
     try:
-        # Intentar obtener la página principal
-        res = requests.get(url_base, timeout=5, headers=headers, allow_redirects=True)
+        # Timeout más corto para evitar bloqueos
+        res = requests.get(url_base, timeout=3, headers=headers, allow_redirects=True)
         if res.status_code != 200:
             return info
         
         texto_pagina = res.text
         
-        # ===== PRIMERO: BÚSQUEDA TRADICIONAL DE EMAILS =====
+        # ===== BÚSQUEDA DE EMAILS CON REGEX =====
         email_patterns = [
             r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
             r'email["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
             r'mail["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
-            r'contacto["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
-            r'e-mail["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
-            r'correo["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
         ]
         
-        # Búsqueda con expresiones regulares
         for pattern in email_patterns:
             found_emails = re.findall(pattern, texto_pagina, re.IGNORECASE)
             for e in found_emails:
                 email_candidato = e if isinstance(e, str) else e[0] if isinstance(e, tuple) else str(e)
-                if validar_email(email_candidato) and not any(ext in email_candidato.lower() for ext in ['.png', '.jpg', '.gif', '.css', '.js', '.svg']):
+                if validar_email(email_candidato):
                     info["email"] = email_candidato.lower()
-                    logger.info(f"✅ Email encontrado con regex: {info['email']}")
                     break
             if info["email"]:
                 break
         
-        # ===== SEGUNDO: SI NO ENCONTRÓ EMAIL CON REGEX, USAR IA =====
+        # ===== SI NO ENCONTRÓ EMAIL, USAR IA =====
         if not info["email"] and GEMINI_API_KEY:
-            logger.info(f"🤖 Usando IA para buscar email en: {url_base}")
             email_ia = buscar_emails_con_ia(texto_pagina, url_base)
             if email_ia:
                 info["email"] = email_ia
         
-        # ===== BÚSQUEDA DE REDES SOCIALES CON BEAUTIFULSOUP =====
+        # ===== BÚSQUEDA DE REDES SOCIALES =====
         soup = BeautifulSoup(texto_pagina, 'html.parser')
         for a in soup.find_all('a', href=True):
             href = a['href'].lower()
             href_completa = urljoin(url_base, a['href'])
             
-            # Buscar Facebook
-            if 'facebook.com' in href and not info["facebook"]:
-                if 'facebook.com/share' not in href and 'facebook.com/sharer' not in href:
-                    info["facebook"] = href_completa
-                    logger.debug(f"Facebook encontrado: {info['facebook'][:50]}...")
+            if 'facebook.com' in href and 'facebook.com/sharer' not in href and not info["facebook"]:
+                info["facebook"] = href_completa
             
-            # Buscar Instagram
-            if 'instagram.com' in href and not info["instagram"]:
-                if 'instagram.com/p/' not in href and 'instagram.com/reel/' not in href:
-                    info["instagram"] = href_completa
-                    logger.debug(f"Instagram encontrado: {info['instagram'][:50]}...")
+            if 'instagram.com' in href and 'instagram.com/p/' not in href and not info["instagram"]:
+                info["instagram"] = href_completa
             
-            # Si ya tenemos ambas, salir
             if info["facebook"] and info["instagram"]:
                 break
         
-        # ===== SI NO ENCONTRÓ REDES CON BEAUTIFULSOUP, USAR IA =====
+        # ===== SI NO ENCONTRÓ REDES, USAR IA =====
         if (not info["facebook"] or not info["instagram"]) and GEMINI_API_KEY:
-            logger.info(f"🤖 Usando IA para buscar redes en: {url_base}")
             redes_ia = buscar_redes_con_ia(texto_pagina, url_base)
-            
             if not info["facebook"] and redes_ia.get('facebook'):
                 info["facebook"] = redes_ia['facebook']
-            
             if not info["instagram"] and redes_ia.get('instagram'):
                 info["instagram"] = redes_ia['instagram']
-        
-        # ===== SI HAY EMAIL, BUSCAR EN PÁGINA DE CONTACTO =====
-        if not info["email"] and not info["facebook"] and not info["instagram"]:
-            # Intentar encontrar página de contacto
-            posibles_contacto = ['contacto', 'contact', 'contactenos', 'contactanos', 'contact-us']
-            for link in soup.find_all('a', href=True):
-                texto_link = link.get_text().lower()
-                href = link['href'].lower()
-                
-                if any(palabra in texto_link or palabra in href for palabra in posibles_contacto):
-                    try:
-                        url_contacto = urljoin(url_base, link['href'])
-                        logger.info(f"🔍 Buscando en página de contacto: {url_contacto}")
-                        
-                        res_contacto = requests.get(url_contacto, timeout=3, headers=headers)
-                        if res_contacto.status_code == 200:
-                            texto_contacto = res_contacto.text
-                            
-                            # Buscar emails en página de contacto
-                            for pattern in email_patterns:
-                                found = re.findall(pattern, texto_contacto, re.IGNORECASE)
-                                for e in found:
-                                    email_candidato = e if isinstance(e, str) else e[0] if isinstance(e, tuple) else str(e)
-                                    if validar_email(email_candidato) and not any(ext in email_candidato.lower() for ext in ['.png', '.jpg', '.gif']):
-                                        info["email"] = email_candidato.lower()
-                                        logger.info(f"✅ Email encontrado en página de contacto: {info['email']}")
-                                        break
-                                if info["email"]:
-                                    break
-                            
-                            # Si no encontró email con regex en contacto, usar IA
-                            if not info["email"] and GEMINI_API_KEY:
-                                email_ia = buscar_emails_con_ia(texto_contacto, url_contacto)
-                                if email_ia:
-                                    info["email"] = email_ia
-                    except:
-                        continue
-                    
-                    if info["email"]:
-                        break
         
     except requests.Timeout:
         logger.debug(f"Timeout en scraping: {url_base}")
@@ -679,104 +615,93 @@ def get_producto_image():
 # ========== RUTA DE BÚSQUEDA ==========
 @app.route('/search_places', methods=['POST'])
 def search_places():
-    """Busca dietéticas en Google Maps."""
-    data = request.json
-    zona = data.get('zona')
-    
-    if not gmaps:
-        logger.error("Google Maps client no inicializado")
-        return jsonify({
-            'success': False, 
-            'error': 'Google Maps no configurado',
-            'leads': []
-        }), 200
-    
-    if not zona:
-        return jsonify({
-            'success': False,
-            'error': 'Zona no especificada',
-            'leads': []
-        }), 200
-    
+    """Busca dietéticas en Google Maps con manejo de errores mejorado."""
     try:
+        data = request.json
+        if not data:
+            return jsonify({'success': False, 'error': 'Datos no válidos', 'leads': []}), 200
+        
+        zona = data.get('zona')
+        
+        if not gmaps:
+            logger.error("Google Maps client no inicializado")
+            return jsonify({
+                'success': False, 
+                'error': 'Google Maps no configurado. Verifica la API key.',
+                'leads': []
+            }), 200
+        
+        if not zona:
+            return jsonify({
+                'success': False,
+                'error': 'Zona no especificada',
+                'leads': []
+            }), 200
+        
         logger.info(f"🔍 Buscando dietéticas en: {zona}")
         
-        # Usar solo 2 queries principales para no saturar
+        # Usar queries más específicas
         queries = [
-            f"dietetica en {zona}",
-            f"dietética {zona}"
+            f"dietetica {zona}",
+            f"dieta {zona}",
+            f"alimentos naturales {zona}"
         ]
         
         leads = []
-        response = None
         all_results = []
         
         for query in queries:
             try:
-                # Primera página de resultados
+                # Timeout más corto para evitar problemas
                 response = gmaps.places(query=query)
-                if response.get('results'):
+                if response and response.get('results'):
                     for result in response.get('results', []):
+                        # Evitar duplicados
                         if not any(r.get('place_id') == result.get('place_id') for r in all_results):
                             all_results.append(result)
                     
                     logger.info(f"✅ Encontrados {len(response['results'])} con: '{query}'")
                     
-                    # Intentar obtener segunda página (más resultados)
-                    if 'next_page_token' in response:
-                        time.sleep(2)  # Esperar 2 segundos como recomienda Google
-                        try:
-                            next_response = gmaps.places(page_token=response['next_page_token'])
-                            if next_response.get('results'):
-                                for result in next_response.get('results', []):
-                                    if not any(r.get('place_id') == result.get('place_id') for r in all_results):
-                                        all_results.append(result)
-                                logger.info(f"✅ +{len(next_response['results'])} más de segunda página")
-                        except Exception as e:
-                            logger.debug(f"Error obteniendo segunda página: {e}")
-                            
             except Exception as e:
-                logger.debug(f"Error con query '{query}': {e}")
+                logger.error(f"Error con query '{query}': {str(e)}")
                 continue
         
         if not all_results:
             return jsonify({'success': True, 'leads': [], 'total': 0}), 200
         
-        # Limitar a 30 resultados para mejor performance
-        results = all_results[:30]
-        logger.info(f"Procesando {len(results)} resultados (límite: 30 para mejor performance)...")
+        # Limitar a 20 resultados para mejor rendimiento
+        results = all_results[:20]
+        logger.info(f"Procesando {len(results)} resultados...")
         
         for idx, p in enumerate(results):
             try:
                 # Obtener detalles del lugar
-                det = gmaps.place(
+                place_detail = gmaps.place(
                     place_id=p['place_id'], 
                     fields=['name', 'formatted_address', 'formatted_phone_number', 'website']
-                )['result']
+                )
+                
+                if not place_detail or 'result' not in place_detail:
+                    continue
+                    
+                det = place_detail['result']
                 
                 tel_raw = det.get('formatted_phone_number', '')
-                tel_clean = re.sub(r'\D', '', tel_raw)
-                
-                # Formatear teléfono
-                if tel_clean:
-                    if not tel_clean.startswith('54'):
-                        tel_clean = '54' + tel_clean if not tel_clean.startswith('0') else '54' + tel_clean[1:]
+                tel_clean = re.sub(r'\D', '', tel_raw) if tel_raw else ''
                 
                 web = det.get('website', '')
                 contacto = {"email": "", "facebook": "", "instagram": ""}
                 
-                # Hacer scraping para todos los que tienen web
+                # Hacer scraping para los que tienen web (con timeout)
                 if web:
                     try:
                         contacto = scraping_profundo_contacto(web, False)
-                        # Pequeña pausa después de cada scraping para no saturar
-                        time.sleep(0.5)
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Error en scraping de {web}: {e}")
 
                 leads.append({
-                    'nombre': det.get('name', 'Sin nombre'),
-                    'direccion': det.get('formatted_address', 'Sin dirección'),
+                    'nombre': det.get('name', 'Sin nombre')[:100],
+                    'direccion': det.get('formatted_address', 'Sin dirección')[:200],
                     'telefono': tel_clean[:15] if tel_clean else '',
                     'tel_display': tel_raw[:30] if tel_raw else 'No disponible',
                     'email': contacto["email"] or '',
@@ -786,7 +711,7 @@ def search_places():
                 })
                 
             except Exception as e:
-                logger.error(f"Error procesando lugar {idx}: {e}")
+                logger.error(f"Error procesando lugar {idx}: {str(e)}")
                 continue
 
         logger.info(f"✅ Total leads procesados: {len(leads)}")
@@ -797,8 +722,16 @@ def search_places():
             'total': len(leads)
         }), 200
         
+    except requests.exceptions.Timeout:
+        logger.error("Timeout en búsqueda de Google Maps")
+        return jsonify({
+            'success': False,
+            'error': 'La búsqueda está tomando demasiado tiempo. Intenta con una zona más específica.',
+            'leads': []
+        }), 200
     except Exception as e:
-        logger.error(f"Error en search_places: {e}")
+        logger.error(f"Error general en search_places: {str(e)}")
+        logger.error(traceback.format_exc())
         return jsonify({
             'success': False,
             'error': f'Error en la búsqueda: {str(e)[:100]}',
@@ -809,18 +742,25 @@ def search_places():
 @app.route('/generate_csv', methods=['POST'])
 def generate_csv():
     """Genera un archivo CSV con los leads seleccionados."""
-    data = request.json
-    selected = data.get('leads', [])
-    
-    df = pd.DataFrame(selected)
-    csv_path = os.path.join(app.config['UPLOAD_FOLDER'], 'leads_seleccionados.csv')
-    df.to_csv(csv_path, index=False, encoding='utf-8-sig')
-    
-    return jsonify({
-        'success': True,
-        'csv_url': '/download_csv',
-        'total': len(selected)
-    })
+    try:
+        data = request.json
+        selected = data.get('leads', [])
+        
+        if not selected:
+            return jsonify({'success': False, 'error': 'No hay leads seleccionados'}), 200
+        
+        df = pd.DataFrame(selected)
+        csv_path = os.path.join(app.config['UPLOAD_FOLDER'], 'leads_seleccionados.csv')
+        df.to_csv(csv_path, index=False, encoding='utf-8-sig')
+        
+        return jsonify({
+            'success': True,
+            'csv_url': '/download_csv',
+            'total': len(selected)
+        })
+    except Exception as e:
+        logger.error(f"Error generando CSV: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 200
 
 @app.route('/download_csv', methods=['GET'])
 def download_csv():
@@ -837,35 +777,35 @@ def ai_query():
     if not GEMINI_API_KEY:
         return jsonify({'error': 'API key no configurada', 'text': None}), 200
     
-    data = request.json
-    prompt = data.get('prompt')
-    system_instruction = data.get('systemInstruction', 'Asistente comercial.')
-    timeout = data.get('timeout', 8)
-
-    default_response = "No encontrado"
-    
-    if "email" in prompt.lower() or "contacto" in prompt.lower():
-        default_response = "No encontrado"
-    elif "consejos" in prompt.lower():
-        default_response = "1. Destaca origen misionero\n2. Precios competitivos\n3. Ofrece muestras"
-    elif "mensaje" in prompt.lower():
-        default_response = "Hola {nombre}, te comparto nuestra lista de precios mayorista de Yerba Mate Soberanía. ¿Te interesaría recibirla?"
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
-    
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "temperature": 0.7,
-            "maxOutputTokens": 150,
-            "topP": 0.95
-        }
-    }
-    
-    if system_instruction:
-        payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
-
     try:
+        data = request.json
+        prompt = data.get('prompt')
+        system_instruction = data.get('systemInstruction', 'Asistente comercial.')
+        timeout = data.get('timeout', 5)
+
+        default_response = "No encontrado"
+        
+        if "email" in prompt.lower() or "contacto" in prompt.lower():
+            default_response = "No encontrado"
+        elif "consejos" in prompt.lower():
+            default_response = "1. Destaca origen misionero\n2. Precios competitivos\n3. Ofrece muestras"
+        elif "mensaje" in prompt.lower():
+            default_response = "Hola {nombre}, te comparto nuestra lista de precios mayorista de Yerba Mate Soberanía. ¿Te interesaría recibirla?"
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+        
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.7,
+                "maxOutputTokens": 150,
+                "topP": 0.95
+            }
+        }
+        
+        if system_instruction:
+            payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+
         logger.info(f"Consultando Gemini API...")
         res = requests.post(url, json=payload, timeout=timeout)
         
