@@ -19,7 +19,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 from email.message import EmailMessage
 from flask import Flask, request, jsonify, Response, stream_with_context, send_file, render_template, session, redirect, url_for
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 from flask_cors import CORS
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -98,161 +98,8 @@ def validar_email(email):
     patron = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return bool(re.match(patron, email))
 
-def extraer_email_de_texto(texto):
-    """Extrae emails de un texto usando múltiples patrones."""
-    if not texto:
-        return ""
-    
-    # Patrones mejorados para encontrar emails
-    patrones = [
-        r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
-        r'email["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
-        r'mail["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
-        r'contacto["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
-        r'e-?mail["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
-        r'correo["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
-        r'electr[oó]nico["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
-        r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})[^a-zA-Z0-9]',
-        r'mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
-    ]
-    
-    for patron in patrones:
-        encontrados = re.findall(patron, texto, re.IGNORECASE)
-        for e in encontrados:
-            if isinstance(e, tuple):
-                e = e[0] if e else ""
-            email_candidato = str(e).strip().lower()
-            if validar_email(email_candidato) and not any(ext in email_candidato for ext in ['.png', '.jpg', '.gif', '.css', '.js', '.svg', '.webp']):
-                return email_candidato
-    return ""
-
-def buscar_en_pagina_web(url, timeout=3):
-    """Busca emails en una página web específica."""
-    if not url or not url.startswith('http'):
-        return ""
-    
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'text/html,application/xhtml+xml',
-        'Accept-Language': 'es-ES,es;q=0.9',
-        'Connection': 'keep-alive',
-    }
-    
-    try:
-        res = requests.get(url, timeout=timeout, headers=headers, allow_redirects=True)
-        if res.status_code != 200:
-            return ""
-        
-        texto = res.text
-        
-        # Buscar email directamente
-        email = extraer_email_de_texto(texto)
-        if email:
-            return email
-        
-        # Si no encontró, buscar enlaces a páginas de contacto
-        soup = BeautifulSoup(texto, 'html.parser')
-        palabras_contacto = ['contacto', 'contact', 'contactenos', 'contactanos', 'contact-us', 'contacto', 'contactar', 'contacto@', 'contacto', 'contacto']
-        
-        for a in soup.find_all('a', href=True):
-            texto_enlace = a.get_text().lower()
-            href = a['href'].lower()
-            
-            if any(palabra in texto_enlace or palabra in href for palabra in palabras_contacto):
-                url_contacto = urljoin(url, a['href'])
-                try:
-                    res_contacto = requests.get(url_contacto, timeout=2, headers=headers)
-                    if res_contacto.status_code == 200:
-                        email_contacto = extraer_email_de_texto(res_contacto.text)
-                        if email_contacto:
-                            return email_contacto
-                except:
-                    continue
-        
-        # Buscar en el footer (donde suele estar el email)
-        footer = soup.find('footer')
-        if footer:
-            email_footer = extraer_email_de_texto(str(footer))
-            if email_footer:
-                return email_footer
-        
-    except requests.Timeout:
-        logger.debug(f"Timeout en búsqueda web: {url}")
-    except Exception as e:
-        logger.debug(f"Error en búsqueda web: {e}")
-    
-    return ""
-
-def buscar_email_en_red_social(url_red_social):
-    """
-    Intenta encontrar email a partir de una red social.
-    Para Instagram y Facebook, busca en la página pública o en el about.
-    """
-    if not url_red_social:
-        return ""
-    
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept-Language': 'es-ES,es;q=0.9',
-    }
-    
-    try:
-        # Para Facebook, intentar acceder a la página de about/contacto
-        if 'facebook.com' in url_red_social.lower():
-            # Limpiar URL de Facebook
-            parsed = urlparse(url_red_social)
-            path_parts = parsed.path.strip('/').split('/')
-            if path_parts and path_parts[0]:
-                username = path_parts[0]
-                # Intentar acceder a la página de about
-                urls_facebook = [
-                    f"https://www.facebook.com/{username}/about",
-                    f"https://www.facebook.com/{username}/contact",
-                    f"https://www.facebook.com/pg/{username}/about",
-                    url_red_social  # La URL original también
-                ]
-                
-                for fb_url in urls_facebook:
-                    try:
-                        res = requests.get(fb_url, timeout=2, headers=headers)
-                        if res.status_code == 200:
-                            email = extraer_email_de_texto(res.text)
-                            if email:
-                                return email
-                    except:
-                        continue
-        
-        # Para Instagram, es más difícil pero podemos intentar
-        elif 'instagram.com' in url_red_social.lower():
-            # Instagram no muestra emails fácilmente, pero a veces en la bio
-            # Simplemente intentamos acceder a la URL proporcionada
-            try:
-                res = requests.get(url_red_social, timeout=2, headers=headers)
-                if res.status_code == 200:
-                    email = extraer_email_de_texto(res.text)
-                    if email:
-                        return email
-            except:
-                pass
-                
-    except Exception as e:
-        logger.debug(f"Error buscando email en red social: {e}")
-    
-    return ""
-
-def buscar_email_en_whatsapp(telefono):
-    """
-    Intenta generar posibles emails basados en el nombre del negocio.
-    No podemos obtener email directamente de WhatsApp, pero podemos
-    intentar generar patrones comunes.
-    """
-    # Esta función no puede obtener emails directamente de WhatsApp
-    # Pero podemos usarla para indicar que tenemos el teléfono
-    # y luego en el scraping de la web podemos buscar emails relacionados con ese teléfono
-    return ""
-
 def scraping_profundo_contacto(url_base, exhaustivo=False):
-    """Busca emails y redes sociales con timeout corto. MEJORADO PARA ENCONTRAR MÁS EMAILS."""
+    """Busca emails y redes sociales con timeout corto."""
     info = {"email": "", "facebook": "", "instagram": ""}
     if not url_base or not url_base.startswith('http'):
         return info
@@ -270,65 +117,26 @@ def scraping_profundo_contacto(url_base, exhaustivo=False):
             return info
         
         texto_pagina = res.text
+        
+        # Buscar emails
+        email_patterns = [
+            r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
+            r'email["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
+            r'mail["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})',
+            r'contacto["\s:=]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
+        ]
+        
+        for pattern in email_patterns:
+            found_emails = re.findall(pattern, texto_pagina, re.IGNORECASE)
+            for e in found_emails:
+                if validar_email(e) and not any(ext in e.lower() for ext in ['.png', '.jpg', '.gif', '.css', '.js']):
+                    info["email"] = e.lower()
+                    break
+            if info["email"]:
+                break
+        
+        # Buscar redes sociales
         soup = BeautifulSoup(texto_pagina, 'html.parser')
-        
-        # ===== 1. BÚSQUEDA MEJORADA DE EMAILS =====
-        # Primero buscar con patrones mejorados en toda la página
-        info["email"] = extraer_email_de_texto(texto_pagina)
-        
-        # ===== 2. SI NO ENCONTRÓ, BUSCAR EN PÁGINAS DE CONTACTO =====
-        if not info["email"]:
-            palabras_contacto = ['contacto', 'contact', 'contactenos', 'contactanos', 'contact-us', 'sobre-nosotros', 'about', 'nosotros', 'empresa']
-            for a in soup.find_all('a', href=True):
-                texto_enlace = a.get_text().lower()
-                href = a['href'].lower()
-                
-                if any(palabra in texto_enlace or palabra in href for palabra in palabras_contacto):
-                    url_contacto = urljoin(url_base, a['href'])
-                    email_contacto = buscar_en_pagina_web(url_contacto, timeout=2)
-                    if email_contacto:
-                        info["email"] = email_contacto
-                        break
-        
-        # ===== 3. BUSCAR EN EL FOOTER (DONDE SUELE ESTAR EL EMAIL) =====
-        if not info["email"]:
-            footer = soup.find('footer')
-            if footer:
-                info["email"] = extraer_email_de_texto(str(footer))
-        
-        # ===== 4. BUSCAR EN METADATOS Y SCRIPTS =====
-        if not info["email"]:
-            # Buscar en meta tags
-            for meta in soup.find_all('meta'):
-                if meta.get('content'):
-                    email_meta = extraer_email_de_texto(meta['content'])
-                    if email_meta:
-                        info["email"] = email_meta
-                        break
-            
-            # Buscar en scripts (a veces tienen datos de contacto)
-            if not info["email"]:
-                for script in soup.find_all('script'):
-                    if script.string:
-                        email_script = extraer_email_de_texto(script.string)
-                        if email_script:
-                            info["email"] = email_script
-                            break
-        
-        # ===== 5. BUSCAR EN MAPAS DEL SITIO =====
-        if not info["email"] and exhaustivo:
-            # Buscar en sitemap.xml
-            sitemap_url = urljoin(url_base, 'sitemap.xml')
-            try:
-                res_sitemap = requests.get(sitemap_url, timeout=2, headers=headers)
-                if res_sitemap.status_code == 200:
-                    email_sitemap = extraer_email_de_texto(res_sitemap.text)
-                    if email_sitemap:
-                        info["email"] = email_sitemap
-            except:
-                pass
-        
-        # ===== BUSCAR REDES SOCIALES (IGUAL QUE ANTES) =====
         for a in soup.find_all('a', href=True):
             href = a['href'].lower()
             if 'facebook.com' in href and not info["facebook"]:
@@ -337,32 +145,6 @@ def scraping_profundo_contacto(url_base, exhaustivo=False):
                 info["instagram"] = a['href']
             if info["facebook"] and info["instagram"]:
                 break
-        
-        # ===== SI ENCONTRAMOS REDES SOCIALES, BUSCAR EMAIL EN ELLAS =====
-        if not info["email"] and info["facebook"]:
-            info["email"] = buscar_email_en_red_social(info["facebook"])
-        
-        if not info["email"] and info["instagram"]:
-            info["email"] = buscar_email_en_red_social(info["instagram"])
-        
-        # ===== SI ENCONTRAMOS WHATSAPP EN LA PÁGINA, USARLO COMO PISTA =====
-        # Buscar números de WhatsApp en la página para posibles emails relacionados
-        if not info["email"]:
-            # Buscar texto que contenga "whatsapp" o "wsp"
-            whatsapp_text = re.findall(r'whatsapp|wsp|wa\.me', texto_pagina, re.IGNORECASE)
-            if whatsapp_text:
-                # Si hay WhatsApp, buscar emails cerca de ese texto
-                lineas = texto_pagina.split('\n')
-                for i, linea in enumerate(lineas):
-                    if 'whatsapp' in linea.lower() or 'wsp' in linea.lower():
-                        # Revisar líneas cercanas
-                        inicio = max(0, i-3)
-                        fin = min(len(lineas), i+4)
-                        contexto = ' '.join(lineas[inicio:fin])
-                        email_contexto = extraer_email_de_texto(contexto)
-                        if email_contexto:
-                            info["email"] = email_contexto
-                            break
                 
     except requests.Timeout:
         logger.debug(f"Timeout en scraping: {url_base}")
@@ -712,93 +494,104 @@ def get_producto_image():
     return "Archivo producto.png no encontrado", 404
 
 # ========== RUTA DE BÚSQUEDA ==========
-# ========== RUTA DE BÚSQUEDA ==========
 @app.route('/search_places', methods=['POST'])
 def search_places():
-    """Busca dietéticas en Google Maps. VERSIÓN OPTIMIZADA."""
+    """Busca dietéticas en Google Maps."""
+    data = request.json
+    zona = data.get('zona')
+    
+    if not gmaps:
+        logger.error("Google Maps client no inicializado")
+        return jsonify({
+            'success': False, 
+            'error': 'Google Maps no configurado',
+            'leads': []
+        }), 200
+    
+    if not zona:
+        return jsonify({
+            'success': False,
+            'error': 'Zona no especificada',
+            'leads': []
+        }), 200
+    
     try:
-        data = request.json
-        zona = data.get('zona')
-        
-        if not gmaps:
-            logger.error("Google Maps client no inicializado")
-            return jsonify({
-                'success': False, 
-                'error': 'Google Maps no configurado',
-                'leads': []
-            }), 200
-        
-        if not zona:
-            return jsonify({
-                'success': False,
-                'error': 'Zona no especificada',
-                'leads': []
-            }), 200
-        
         logger.info(f"🔍 Buscando dietéticas en: {zona}")
         
-        # REDUCIDO: Solo 1 query principal
-        queries = [f"dietetica {zona}"]
+        # Usar solo 2 queries principales para no saturar
+        queries = [
+            f"dietetica en {zona}",
+            f"dietética {zona}"
+        ]
         
         leads = []
+        response = None
         all_results = []
         
         for query in queries:
             try:
+                # Primera página de resultados
                 response = gmaps.places(query=query)
-                if response and response.get('results'):
-                    # Tomar solo primeros 15 resultados
-                    results = response.get('results', [])[:15]
-                    for result in results:
+                if response.get('results'):
+                    for result in response.get('results', []):
                         if not any(r.get('place_id') == result.get('place_id') for r in all_results):
                             all_results.append(result)
                     
-                    logger.info(f"✅ Encontrados {len(results)} con: '{query}'")
+                    logger.info(f"✅ Encontrados {len(response['results'])} con: '{query}'")
+                    
+                    # Intentar obtener segunda página (más resultados)
+                    if 'next_page_token' in response:
+                        time.sleep(2)  # Esperar 2 segundos como recomienda Google
+                        try:
+                            next_response = gmaps.places(page_token=response['next_page_token'])
+                            if next_response.get('results'):
+                                for result in next_response.get('results', []):
+                                    if not any(r.get('place_id') == result.get('place_id') for r in all_results):
+                                        all_results.append(result)
+                                logger.info(f"✅ +{len(next_response['results'])} más de segunda página")
+                        except Exception as e:
+                            logger.debug(f"Error obteniendo segunda página: {e}")
                             
             except Exception as e:
-                logger.error(f"Error con query '{query}': {str(e)}")
+                logger.debug(f"Error con query '{query}': {e}")
                 continue
         
         if not all_results:
             return jsonify({'success': True, 'leads': [], 'total': 0}), 200
         
-        # REDUCIDO: Máximo 10 resultados para evitar timeout
-        results = all_results[:10]
-        logger.info(f"Procesando {len(results)} resultados (límite: 10)...")
+        # Limitar a 30 resultados para mejor performance
+        results = all_results[:30]
+        logger.info(f"Procesando {len(results)} resultados (límite: 30 para mejor performance)...")
         
         for idx, p in enumerate(results):
             try:
-                # Obtener detalles básicos del lugar (sin fields específicos para ir más rápido)
-                det = p  # Usar los datos que ya tenemos
-                
-                # Intentar obtener más detalles SOLO para los primeros 5
-                if idx < 5:
-                    try:
-                        place_detail = gmaps.place(
-                            place_id=p['place_id'], 
-                            fields=['formatted_phone_number', 'website']
-                        )
-                        if place_detail and 'result' in place_detail:
-                            det = place_detail['result']
-                    except:
-                        pass
+                # Obtener detalles del lugar
+                det = gmaps.place(
+                    place_id=p['place_id'], 
+                    fields=['name', 'formatted_address', 'formatted_phone_number', 'website']
+                )['result']
                 
                 tel_raw = det.get('formatted_phone_number', '')
-                tel_clean = re.sub(r'\D', '', tel_raw) if tel_raw else ''
+                tel_clean = re.sub(r'\D', '', tel_raw)
+                
+                # Formatear teléfono
+                if tel_clean:
+                    if not tel_clean.startswith('54'):
+                        tel_clean = '54' + tel_clean if not tel_clean.startswith('0') else '54' + tel_clean[1:]
                 
                 web = det.get('website', '')
                 contacto = {"email": "", "facebook": "", "instagram": ""}
                 
-                # REDUCIDO: Scrapear SOLO los primeros 3 con web
-                if web and idx < 3:  # Solo los primeros 3
+                # Solo hacer scraping si hay web y es uno de cada 3 para no saturar
+                if web and idx % 3 == 0:  # Scrapear solo 1 de cada 3
                     try:
                         contacto = scraping_profundo_contacto(web, False)
                     except:
                         pass
 
                 leads.append({
-                    'nombre': p.get('name', 'Sin nombre')[:100],
-                    'direccion': p.get('formatted_address', 'Sin dirección')[:200],
+                    'nombre': det.get('name', 'Sin nombre'),
+                    'direccion': det.get('formatted_address', 'Sin dirección'),
                     'telefono': tel_clean[:15] if tel_clean else '',
                     'tel_display': tel_raw[:30] if tel_raw else 'No disponible',
                     'email': contacto["email"] or '',
@@ -807,8 +600,12 @@ def search_places():
                     'web': web or ''
                 })
                 
+                # Pequeña pausa entre procesamientos para no saturar
+                if idx % 5 == 0 and idx > 0:
+                    time.sleep(0.5)
+                
             except Exception as e:
-                logger.error(f"Error procesando lugar {idx}: {str(e)}")
+                logger.error(f"Error procesando lugar {idx}: {e}")
                 continue
 
         logger.info(f"✅ Total leads procesados: {len(leads)}")
@@ -820,12 +617,13 @@ def search_places():
         }), 200
         
     except Exception as e:
-        logger.error(f"Error en search_places: {str(e)}")
+        logger.error(f"Error en search_places: {e}")
         return jsonify({
             'success': False,
             'error': f'Error en la búsqueda: {str(e)[:100]}',
             'leads': []
         }), 200
+
 # ========== RUTA DE GENERACIÓN CSV ==========
 @app.route('/generate_csv', methods=['POST'])
 def generate_csv():
@@ -852,10 +650,9 @@ def download_csv():
     return "Archivo no encontrado", 404
 
 # ========== RUTA DE IA ==========
-# ========== RUTA DE IA ==========
 @app.route('/api/ai_query', methods=['POST'])
 def ai_query():
-    """Proxy para Gemini API."""
+    """Proxy para Gemini API - VERSIÓN CORREGIDA."""
     if not GEMINI_API_KEY:
         return jsonify({'error': 'API key no configurada', 'text': None}), 200
     
@@ -873,7 +670,7 @@ def ai_query():
     elif "mensaje" in prompt.lower():
         default_response = "Hola {nombre}, te comparto nuestra lista de precios mayorista de Yerba Mate Soberanía. ¿Te interesaría recibirla?"
 
-    # CORREGIDO: Usar los modelos disponibles según la API
+    # MODELOS CORRECTOS según la respuesta de la API
     modelos = [
         "gemini-2.5-flash",
         "gemini-2.5-pro",
@@ -945,4 +742,3 @@ def health():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
-
