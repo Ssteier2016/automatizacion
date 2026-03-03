@@ -889,12 +889,11 @@ def ai_query():
     elif "mensaje" in prompt.lower():
         default_response = "Hola {nombre}, te comparto nuestra lista de precios mayorista de Yerba Mate Soberanía. ¿Te interesaría recibirla?"
 
-    # CORREGIDO: Usar el modelo correcto de Gemini
-    # Intentar con diferentes versiones del modelo
+    # CORREGIDO: Usar los modelos disponibles según la API
     modelos = [
-        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={GEMINI_API_KEY}",
-        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent?key={GEMINI_API_KEY}",
-        f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-2.0-flash"
     ]
     
     payload = {
@@ -910,22 +909,24 @@ def ai_query():
         payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
 
     # Probar cada modelo hasta que uno funcione
-    for url in modelos:
+    for modelo in modelos:
         try:
-            logger.info(f"Consultando Gemini API con URL: {url.split('?')[0]}...")
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent?key={GEMINI_API_KEY}"
+            logger.info(f"Consultando Gemini API con modelo: {modelo}")
+            
             res = requests.post(url, json=payload, timeout=timeout)
             
             if res.status_code == 200:
                 result = res.json()
                 if 'candidates' in result and len(result['candidates']) > 0:
                     text = result['candidates'][0]['content']['parts'][0]['text']
-                    logger.info("✅ Respuesta recibida de Gemini")
+                    logger.info(f"✅ Respuesta recibida de Gemini con modelo: {modelo}")
                     return jsonify({'text': text})
             else:
-                logger.warning(f"Gemini respondió con {res.status_code} para esta URL")
+                logger.warning(f"Modelo {modelo} respondió con {res.status_code}")
                 
         except Exception as e:
-            logger.warning(f"Error con modelo: {e}")
+            logger.warning(f"Error con modelo {modelo}: {e}")
             continue
     
     # Si todos fallan, usar respuesta por defecto
