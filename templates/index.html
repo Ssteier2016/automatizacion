@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yerba Soberanía - Automatización e IA</title>
+    <title>Digitalízate - Buscador de Clientes y Automatización</title>
     <!-- Tailwind CSS CDN solo para desarrollo, se puede reemplazar en producción -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -233,10 +233,10 @@
         <aside class="lg:w-96 sidebar p-6 space-y-6 flex flex-col shrink-0 lg:h-screen overflow-y-auto custom-scroll">
             <div class="flex items-center gap-3">
                 <div class="bg-emerald-600 p-2 rounded-xl">
-                    <i class="fa-solid fa-leaf text-white text-xl"></i>
+                    <i class="fa-solid fa-globe text-white text-xl"></i>
                 </div>
                 <div>
-                    <h1 class="text-lg font-black tracking-tighter uppercase leading-none italic">Yerba <span class="accent-emerald">Soberanía</span></h1>
+                    <h1 class="text-lg font-black tracking-tighter uppercase leading-none italic">Digital<span class="accent-emerald">ízate</span></h1>
                 </div>
             </div>
 
@@ -246,13 +246,36 @@
 
             <!-- 1. BUSCADOR -->
             <div id="tutorial-step-1" class="space-y-4 pt-4 rounded-2xl transition-all duration-300">
-                <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2">1. Localización</h3>
+                <h3 class="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2">1. Rubro y Localización</h3>
+                <select id="rubro" onchange="document.getElementById('rubroCustom').classList.toggle('hidden', this.value !== '__otro__')" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-2xl text-sm outline-none focus:border-emerald-500 transition">
+                    <option value="">Elegí un rubro...</option>
+                    <option value="restaurantes y bares">Restaurantes y bares</option>
+                    <option value="peluquerías y estética">Peluquerías y estética</option>
+                    <option value="kioscos y almacenes">Kioscos y almacenes</option>
+                    <option value="ferreterías">Ferreterías</option>
+                    <option value="indumentaria y calzado">Indumentaria y calzado</option>
+                    <option value="gimnasios">Gimnasios</option>
+                    <option value="veterinarias">Veterinarias</option>
+                    <option value="talleres mecánicos">Talleres mecánicos</option>
+                    <option value="inmobiliarias">Inmobiliarias</option>
+                    <option value="dietéticas y herboristerías">Dietéticas y herboristerías</option>
+                    <option value="panaderías y pastelerías">Panaderías y pastelerías</option>
+                    <option value="cafeterías">Cafeterías</option>
+                    <option value="farmacias">Farmacias</option>
+                    <option value="librerías y papelerías">Librerías y papelerías</option>
+                    <option value="__otro__">Otro (escribir)...</option>
+                </select>
+                <input type="text" id="rubroCustom" placeholder="Ej: estudios contables" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-2xl text-sm outline-none focus:border-emerald-500 transition hidden">
                 <div class="flex gap-2">
                     <input type="text" id="zona" placeholder="Ej: Morón, Buenos Aires" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-2xl text-sm outline-none focus:border-emerald-500 transition">
                     <button onclick="buscar()" id="btnBuscar" class="bg-emerald-600 px-5 rounded-2xl hover:bg-emerald-500 transition">
                         <i class="fa-solid fa-search"></i>
                     </button>
                 </div>
+                <label class="flex items-center gap-2 text-[10px] text-slate-400 uppercase tracking-wide">
+                    <input type="checkbox" id="soloSinWeb" class="accent-emerald-600">
+                    Priorizar comercios sin sitio web (mejor prospecto)
+                </label>
                 <button onclick="analizarZonaIA()" id="btnAnalizarIA" class="w-full ai-button text-white font-bold py-2 px-4 rounded-xl text-[10px] uppercase flex items-center justify-center gap-2 hidden">
                     <span>✨ Analizar Estrategia IA</span>
                 </button>
@@ -275,7 +298,7 @@
                     <label class="text-[9px] font-bold text-slate-500 uppercase px-1">
                         Mensaje ({nombre})
                     </label>
-                    <textarea id="waBody" rows="3" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-[10px] outline-none focus:border-emerald-500 resize-none transition-all">Hola {nombre}, ¿cómo estás? Te escribo de Yerba Mate Soberanía para enviarte nuestra lista de precios mayorista.</textarea>
+                    <textarea id="waBody" rows="3" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-[10px] outline-none focus:border-emerald-500 resize-none transition-all">Hola {nombre}, ¿cómo estás? Te escribo de Digitalízate: ayudamos a comercios como el tuyo a conseguir más clientes en Google Maps, redes y web propia. ¿Te interesaría una propuesta sin costo?</textarea>
                     
                     <button onclick="iniciarWhatsAppSecuencial()" id="btnWhatsAppSecuencial" class="w-full bg-emerald-600 text-white font-black py-3 rounded-xl hover:bg-emerald-500 transition flex items-center justify-center gap-2 text-xs uppercase shadow-lg">
                         <i class="fa-brands fa-whatsapp text-lg"></i> Iniciar Envío Secuencial
@@ -331,7 +354,7 @@
                                     <li>Inicia sesión con tu Gmail</li>
                                     <li>En "Seleccionar aplicación" elige <span class="text-white font-bold">"Correo"</span></li>
                                     <li>En "Seleccionar dispositivo" elige <span class="text-white font-bold">"Otro"</span></li>
-                                    <li>Escribe: <span class="text-white font-bold bg-slate-800 px-2 py-0.5 rounded">CRM Soberanía</span></li>
+                                    <li>Escribe: <span class="text-white font-bold bg-slate-800 px-2 py-0.5 rounded">CRM Digitalízate</span></li>
                                     <li>Haz clic en <span class="text-white font-bold">"GENERAR"</span></li>
                                 </ol>
                             </div>
@@ -405,7 +428,7 @@
                                 <ol class="list-decimal list-inside text-slate-400 space-y-1 ml-1">
                                     <li>Ve a <a href="https://myaccount.google.com/apppasswords" target="_blank" class="text-emerald-400 underline">App Passwords</a></li>
                                     <li>Revoca todas las contraseñas anteriores</li>
-                                    <li>Genera UNA NUEVA con el nombre "CRM Soberanía"</li>
+                                    <li>Genera UNA NUEVA con el nombre "CRM Digitalízate"</li>
                                     <li>Copia los 16 caracteres NUEVOS</li>
                                     <li>Pégalos arriba (con o sin espacios)</li>
                                 </ol>
@@ -431,38 +454,39 @@
                         <div id="claveValidacion" class="text-[8px] mt-1"></div>
                     </div>
 
+                    <label class="text-[9px] font-bold text-slate-500 uppercase px-1">Asunto del Email</label>
+                    <input type="text" id="subject" value="Tu negocio en Google Maps + Web propia — Digitalízate" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-[10px] outline-none focus:border-blue-500">
+
                     <label class="text-[9px] font-bold text-slate-500 uppercase px-1 flex justify-between">
                         <span>Cuerpo del Email</span>
-                        <span class="text-emerald-500">✅ Se adjuntará producto.png</span>
+                        <span id="adjuntoEstado" class="text-slate-500">producto.png no encontrado (opcional)</span>
                     </label>
                     <textarea id="emailBody" rows="12" class="w-full bg-slate-900 border border-slate-800 p-3 rounded-xl text-[10px] outline-none focus:border-blue-500 resize-none transition-all">Hola, buen día:
 
-Mi nombre es Juan Ignacio Lewczuk y me comunico con {nombre} ubicado en {direccion} para ofrecerles Yerba Mate Soberanía para venta por mayor en dietéticas y comercios naturales.
+Somos el equipo de Digitalízate y nos comunicamos con {nombre}, ubicado en {direccion}, porque ayudamos a comercios y PyMEs a conseguir más clientes con presencia digital.
 
-Trabajamos con una yerba de origen misionero, de excelente calidad, estacionada, con muy buena aceptación por parte de los consumidores que buscan un producto tradicional y confiable.
+Nos especializamos en:
+- Alta y optimización de tu ficha en Google Maps
+- Página web profesional y catálogo online
+- Bots de WhatsApp que responden 24/7
+- Configuración de redes sociales para negocios
 
-Ofrecemos:
-- Precios mayoristas competitivos
-- Abastecimiento constante
-- Formatos ideales para dietéticas
-- Posibilidad de compras recurrentes
+Empezamos con una primera etapa sin costo para que veas resultados antes de decidir, y después seguimos con el plan de mantenimiento que mejor se ajuste a tu negocio.
 
-Adjunto imagen de nuestro producto para que conozcas su presentación.
+Quedo a disposición para enviarte una propuesta a medida o coordinar una breve llamada.
 
-Quedo a disposición para enviarles lista de precios, condiciones de venta o coordinar un primer pedido de prueba.
-
-Muchas gracias por su tiempo.
+Muchas gracias por tu tiempo.
 
 Saludos cordiales,
-Juan Ignacio Lewczuk
-📱 WhatsApp: 11 3134-4552
-✉️ Email: lewczukjuani@gmail.com</textarea>
+Equipo Digitalízate
+✉️ Email: info@digitalizate.work
+🌐 www.digitalizate.work</textarea>
 
                     <!-- VISTA PREVIA DE LA IMAGEN -->
                     <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-700">
-                        <p class="text-[9px] text-slate-400 mb-2">📸 Vista previa del adjunto:</p>
-                        <img id="productImagePreview" src="/producto.png" alt="Producto Soberanía" class="product-image-preview max-h-[100px]" onerror="this.style.display='none'">
-                        <p class="text-[8px] text-slate-500 mt-1">* La imagen se adjuntará automáticamente al email</p>
+                        <p class="text-[9px] text-slate-400 mb-2">📸 Vista previa del adjunto (opcional, colocá tu propio producto.png en la raíz del proyecto):</p>
+                        <img id="productImagePreview" src="/producto.png" alt="Imagen adjunta" class="product-image-preview max-h-[100px]" onerror="this.style.display='none'; window.productoImageExists=false; document.getElementById('adjuntoEstado') && (document.getElementById('adjuntoEstado').innerText='producto.png no encontrado (opcional)')" onload="window.productoImageExists=true; document.getElementById('adjuntoEstado') && (document.getElementById('adjuntoEstado').innerText='✅ Se adjuntará producto.png')">
+                        <p class="text-[8px] text-slate-500 mt-1">* Si existe, se adjunta automáticamente al email</p>
                     </div>
 
                     <!-- BOTÓN DE CAMPAÑA -->
@@ -518,7 +542,7 @@ Juan Ignacio Lewczuk
         <div class="bg-slate-900 border border-slate-700 w-full max-w-lg p-8 rounded-[2.5rem] shadow-2xl space-y-6">
             <div class="flex items-center gap-3 border-b border-slate-800 pb-3">
                 <i class="fa-solid fa-sparkles text-blue-500 text-2xl"></i>
-                <h2 class="text-lg font-black text-white uppercase italic">IA Soberanía ✨</h2>
+                <h2 class="text-lg font-black text-white uppercase italic">IA Digitalízate ✨</h2>
             </div>
             <div id="aiResponseContent" class="text-xs text-slate-300 leading-relaxed overflow-y-auto max-h-[300px] custom-scroll whitespace-pre-wrap">
                 Analizando...
@@ -699,11 +723,9 @@ Juan Ignacio Lewczuk
 
         function enviarCampanhaGmail() {
             const selectedLeads = obtenerLeadsSeleccionados();
-            const subject = document.getElementById('emailUser').value ? 
-                'Oferta Mayorista - Yerba Mate Soberanía' : 
-                document.getElementById('subject')?.value || 'Oferta Mayorista - Yerba Mate Soberanía';
+            const subject = document.getElementById('subject')?.value || 'Tu negocio en Google Maps + Web propia — Digitalízate';
             const body = document.getElementById('emailBody').value;
-            const attachImage = true; // Siempre adjuntar imagen
+            const attachImage = !!window.productoImageExists;
             
             if (selectedLeads.length === 0) {
                 mostrarNotificacion('Selecciona al menos un lead', 'error');
@@ -966,8 +988,13 @@ Juan Ignacio Lewczuk
         // ========== FUNCIONES DE BÚSQUEDA CORREGIDAS ==========
         async function buscar() {
     const zonaInput = document.getElementById('zona').value;
-    if(!zonaInput) return;
-    
+    const rubroSelect = document.getElementById('rubro').value;
+    const rubroInput = rubroSelect === '__otro__' ? document.getElementById('rubroCustom').value.trim() : rubroSelect;
+    if(!zonaInput || !rubroInput) {
+        mostrarNotificacion('⚠️ Elegí un rubro y una zona antes de buscar', 'warning');
+        return;
+    }
+
     cancelarTodasLasPeticionesIA();
     revelandoEmails = false;
     
@@ -981,10 +1008,10 @@ Juan Ignacio Lewczuk
     try {
         const url = '/search_places';
         
-        const res = await fetch(url, { 
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json'}, 
-            body: JSON.stringify({zona: zonaInput}),
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({zona: zonaInput, rubro: rubroInput}),
             timeout: 30000 // Timeout de 30 segundos
         });
         
@@ -1001,7 +1028,12 @@ Juan Ignacio Lewczuk
             document.getElementById('stats').innerText = 'ERROR';
             document.getElementById('btnAnalizarIA').classList.add('hidden');
         } else {
-            leads = data.leads || []; 
+            leads = data.leads || [];
+            if (document.getElementById('soloSinWeb').checked) {
+                leads = leads.filter(l => l.sin_web);
+            } else {
+                leads.sort((a, b) => (b.sin_web === true) - (a.sin_web === true));
+            }
             renderTable();
             document.getElementById('stats').innerText = `${leads.length} RESULTADOS`;
             
@@ -1123,7 +1155,7 @@ Juan Ignacio Lewczuk
                         <input type="checkbox" class="lead-check" data-index="${i}" ${hasValidContact ? 'checked' : ''}>
                     </td>
                     <td class="px-6 py-4">
-                        <div class="font-bold text-slate-200">${l.nombre}</div>
+                        <div class="font-bold text-slate-200">${l.nombre} ${l.sin_web ? '<span class="ml-1 px-1.5 py-0.5 rounded bg-emerald-900 text-emerald-400 text-[8px] uppercase align-middle" title="No tiene sitio web: mejor prospecto para Digitalízate">Sin web</span>' : ''}</div>
                         <span class="direccion-small">
                             <i class="fa-solid fa-location-dot text-[8px] mr-1 text-slate-600"></i>
                             ${direccionCorta}
@@ -1204,7 +1236,7 @@ Juan Ignacio Lewczuk
             cuerpo = cuerpo.replace('{nombre}', l.nombre)
                           .replace('{direccion}', l.direccion || '');
             
-            const asunto = encodeURIComponent('Oferta Mayorista - Yerba Mate Soberanía');
+            const asunto = encodeURIComponent(document.getElementById('subject')?.value || 'Tu negocio en Google Maps + Web propia — Digitalízate');
             const cuerpoEncoded = encodeURIComponent(cuerpo);
             
             window.location.href = `mailto:${l.email}?subject=${asunto}&body=${cuerpoEncoded}`;
@@ -1298,10 +1330,10 @@ Juan Ignacio Lewczuk
                     waWindow.location.href = url;
                     waWindow.focus();
                 } catch(e) {
-                    waWindow = window.open(url, 'whatsapp_soberania');
+                    waWindow = window.open(url, 'whatsapp_digitalizate');
                 }
             } else {
-                waWindow = window.open(url, 'whatsapp_soberania');
+                waWindow = window.open(url, 'whatsapp_digitalizate');
             }
             
             document.getElementById(`status-${idx}`).innerHTML = 
@@ -1405,9 +1437,9 @@ Juan Ignacio Lewczuk
                         leads: selected, 
                         email_user: user, 
                         email_pass: passSinEspacios,
-                        subject: "Oferta Mayorista - Yerba Mate Soberanía", 
-                        body: bodyContent, 
-                        attach_image: true 
+                        subject: document.getElementById('subject')?.value || 'Tu negocio en Google Maps + Web propia — Digitalízate',
+                        body: bodyContent,
+                        attach_image: !!window.productoImageExists
                     })
                 });
 
@@ -1490,11 +1522,12 @@ Juan Ignacio Lewczuk
             btn.innerText = "✨..."; 
             btn.classList.add('ai-loading'); 
             
+            const rubroActual = (document.getElementById('rubro')?.value === '__otro__' ? document.getElementById('rubroCustom')?.value : document.getElementById('rubro')?.value) || 'un comercio local';
             const res = await callGemini(
-                "Genera un mensaje corto de WhatsApp para un dueño de dietética vendiendo Yerba Mate Soberanía. Usa {nombre}. Sé cordial y profesional.", 
+                `Genera un mensaje corto de WhatsApp ofreciendo el servicio de Digitalízate (presencia en Google Maps, página web, redes sociales) al dueño de un comercio de ${rubroActual}. Usa {nombre}. Sé cordial y profesional.`,
                 "Vendedor estrella.",
                 8000
-            ); 
+            );
             
             if(res && res.text) {
                 textarea.value = res.text;
@@ -1520,13 +1553,13 @@ Juan Ignacio Lewczuk
             content.innerText = "✨ IA Analizando zona...\n\n⏱️ Esto puede tomar hasta 10 segundos..."; 
             
             const nombres = leads.slice(0, 10).map(l => l.nombre).join(", ");
-            const prompt = `Analiza estos comercios: ${nombres}. Dame 3 consejos de venta específicos para Yerba Mate Soberanía enfocados en dietéticas.`; 
-            const res = await callGemini(prompt, "Estratega comercial experto en marketing para alimentos.", 10000); 
-            
+            const prompt = `Analiza estos comercios: ${nombres}. Dame 3 consejos de venta específicos para ofrecer el servicio de Digitalízate (presencia en Google Maps, web, redes) a este tipo de negocio.`;
+            const res = await callGemini(prompt, "Estratega comercial experto en marketing digital para PyMEs.", 10000);
+
             if (res && res.text) {
                 content.innerText = res.text;
             } else if (res && res.error === 'TIMEOUT') {
-                content.innerText = "⏱️ La IA tardó demasiado. Consejos rápidos:\n\n1. Destacar origen misionero\n2. Enfocar en precio mayorista\n3. Ofrecer muestras gratis";
+                content.innerText = "⏱️ La IA tardó demasiado. Consejos rápidos:\n\n1. Destacar que aparecer en Google Maps es gratis de probar\n2. Mostrar antes/después de otros comercios\n3. Ofrecer la primera etapa sin costo";
             } else if (res && res.error === 'LIMIT') {
                 content.innerText = `⏳ Límite de cuota de IA excedido. Espera ${res.wait} segundos.`;
             } else if (res && res.error === 'SERVER_ERROR') {

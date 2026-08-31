@@ -26,6 +26,9 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -42,7 +45,7 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 # ========== CONFIGURACIÓN DESDE VARIABLES DE ENTORNO ==========
 # Configuración OAuth de Gmail
 SCOPES = ['https://www.googleapis.com/auth/gmail.send']
-REDIRECT_URI = os.environ.get('REDIRECT_URI', 'https://yerbamate.onrender.com/oauth2callback')
+REDIRECT_URI = os.environ.get('REDIRECT_URI', 'http://localhost:5000/oauth2callback')
 
 # Credenciales de Google desde variables de entorno
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
@@ -153,13 +156,13 @@ def scraping_profundo_contacto(url_base, exhaustivo=False):
     
     return info
 
-def enviar_mail_soberania(smtp_user, smtp_pass, destino, asunto, cuerpo, adjuntar_imagen):
+def enviar_mail(smtp_user, smtp_pass, destino, asunto, cuerpo, adjuntar_imagen):
     """Envía email vía Gmail con adjunto (Método SMTP original)."""
     if not destino or not validar_email(destino):
         return False, "Email inválido"
-    
+
     msg = MIMEMultipart()
-    msg['From'] = f"Juan Ignacio Lewczuk <{smtp_user}>"
+    msg['From'] = f"Digitalízate <{smtp_user}>"
     msg['To'] = destino
     msg['Subject'] = asunto
     msg.attach(MIMEText(cuerpo, 'plain', 'utf-8'))
@@ -169,7 +172,7 @@ def enviar_mail_soberania(smtp_user, smtp_pass, destino, asunto, cuerpo, adjunta
             with open('producto.png', 'rb') as f:
                 img_data = f.read()
             adjunto = MIMEImage(img_data)
-            adjunto.add_header('Content-Disposition', 'attachment', filename="producto_soberania.png")
+            adjunto.add_header('Content-Disposition', 'attachment', filename="adjunto.png")
             msg.attach(adjunto)
         except Exception as e:
             logger.error(f"Error adjuntando imagen: {e}")
@@ -307,7 +310,7 @@ def send_bulk_emails_gmail():
     
     data = request.json
     selected = data.get('leads', [])
-    subject = data.get('subject', 'Oferta Mayorista - Yerba Mate Soberanía')
+    subject = data.get('subject', 'Tu negocio en Google Maps + Web propia — Digitalízate')
     body = data.get('body', '')
     attach_img = data.get('attach_image', False)
     
@@ -380,7 +383,7 @@ def send_bulk_emails_gmail():
                             image_data = f.read()
                         message.add_attachment(image_data, maintype='image', 
                                              subtype='png', 
-                                             filename='producto_soberania.png')
+                                             filename='adjunto.png')
                     
                     # Codificar para API de Gmail
                     encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
@@ -430,7 +433,7 @@ def start_email_campaign():
     selected = data.get('leads', [])
     user = data.get('email_user')
     password = data.get('email_pass')
-    subject = data.get('subject', 'Oferta Mayorista - Yerba Mate Soberanía')
+    subject = data.get('subject', 'Tu negocio en Google Maps + Web propia — Digitalízate')
     body = data.get('body')
     attach_img = str(data.get('attach_image')).lower() == 'true'
 
@@ -449,7 +452,7 @@ def start_email_campaign():
                 if '{direccion}' in cuerpo_personalizado:
                     cuerpo_personalizado = cuerpo_personalizado.replace('{direccion}', lead.get('direccion', ''))
                 
-                ok, msg = enviar_mail_soberania(
+                ok, msg = enviar_mail(
                     user, password, 
                     lead.get('email'), 
                     subject, 
@@ -484,7 +487,7 @@ def index():
         return render_template('index.html')
     except Exception as e:
         logger.error(f"Error cargando index.html: {e}")
-        return "Bienvenido a Yerba Soberanía API", 200
+        return "Bienvenido a Digitalízate API", 200
 
 @app.route('/producto.png')
 def get_producto_image():
@@ -493,44 +496,46 @@ def get_producto_image():
         return send_file('producto.png', mimetype='image/png')
     return "Archivo producto.png no encontrado", 404
 
-# ========== RUTA DE BÚSQUEDA - AGROMERCADOS ==========
+# ========== RUTA DE BÚSQUEDA DE COMERCIOS ==========
 @app.route('/search_places', methods=['POST'])
 def search_places():
-    """Busca establecimientos agropecuarios en Google Maps."""
+    """Busca comercios de un rubro en una zona vía Google Maps."""
     data = request.json
     zona = data.get('zona')
-    
+    rubro = (data.get('rubro') or '').strip()
+
     if not gmaps:
         logger.error("Google Maps client no inicializado")
         return jsonify({
-            'success': False, 
+            'success': False,
             'error': 'Google Maps no configurado',
             'leads': []
         }), 200
-    
+
     if not zona:
         return jsonify({
             'success': False,
             'error': 'Zona no especificada',
             'leads': []
         }), 200
-    
+
+    if not rubro:
+        return jsonify({
+            'success': False,
+            'error': 'Rubro no especificado',
+            'leads': []
+        }), 200
+
     try:
-        logger.info(f"🔍 Buscando establecimientos agropecuarios en: {zona}")
-        
-        # Términos de búsqueda para agronomía
+        logger.info(f"🔍 Buscando '{rubro}' en: {zona}")
+
+        # Variantes de búsqueda para cubrir más resultados del mismo rubro
         queries = [
-            f"agrocomercial en {zona}",
-            f"agroveterinaria en {zona}",
-            f"agropecuaria en {zona}",
-            f"agroinsumos en {zona}",
-            f"agroanimal en {zona}",
-            f"campo agropecuario {zona}",
-            f"insumos agropecuarios {zona}",
-            f"veterinaria campo {zona}",
-            f"agronomía {zona}"
+            f"{rubro} en {zona}",
+            f"{rubro} cerca de {zona}",
+            f"mejores {rubro} en {zona}",
         ]
-        
+
         leads = []
         all_results = []
         
@@ -587,152 +592,11 @@ def search_places():
                         tel_clean = '54' + tel_clean if not tel_clean.startswith('0') else '54' + tel_clean[1:]
                 
                 web = det.get('website', '')
+                sin_web = not bool(web)
                 contacto = {"email": "", "facebook": "", "instagram": ""}
-                
+
                 # Solo hacer scraping si hay web y es uno de cada 3 para no saturar
                 if web and idx % 3 == 0:  # Scrapear solo 1 de cada 3
-                    try:
-                        contacto = scraping_profundo_contacto(web, False)
-                    except:
-                        pass
-                
-                # Determinar tipo de negocio basado en el nombre y la categoría
-                nombre = det.get('name', 'Sin nombre')
-                tipo_negocio = "Agropecuario"
-                nombre_lower = nombre.lower()
-                
-                if 'veterinaria' in nombre_lower or 'veterinary' in nombre_lower:
-                    tipo_negocio = "Agroveterinaria"
-                elif 'agrocomercial' in nombre_lower:
-                    tipo_negocio = "Agrocomercial"
-                elif 'agroanimal' in nombre_lower:
-                    tipo_negocio = "Agroanimal"
-                elif 'insumos' in nombre_lower:
-                    tipo_negocio = "Agroinsumos"
-                elif 'campo' in nombre_lower:
-                    tipo_negocio = "Campo/Establecimiento"
-                elif 'semillas' in nombre_lower:
-                    tipo_negocio = "Semillas/Insumos"
-                elif 'forraje' in nombre_lower:
-                    tipo_negocio = "Forrajes"
-
-                leads.append({
-                    'nombre': nombre,
-                    'direccion': det.get('formatted_address', 'Sin dirección'),
-                    'telefono': tel_clean[:15] if tel_clean else '',
-                    'tel_display': tel_raw[:30] if tel_raw else 'No disponible',
-                    'email': contacto["email"] or '',
-                    'facebook': contacto["facebook"] or '',
-                    'instagram': contacto["instagram"] or '',
-                    'web': web or '',
-                    'tipo': tipo_negocio  # Agregar campo para identificar el tipo de negocio
-                })
-                
-                # Pequeña pausa entre procesamientos para no saturar
-                if idx % 5 == 0 and idx > 0:
-                    time.sleep(0.5)
-                
-            except Exception as e:
-                logger.error(f"Error procesando lugar {idx}: {e}")
-                continue
-
-        logger.info(f"✅ Total leads procesados: {len(leads)}")
-        
-        # Estadísticas por tipo
-        tipos_stats = {}
-        for lead in leads:
-            tipo = lead.get('tipo', 'Agropecuario')
-            tipos_stats[tipo] = tipos_stats.get(tipo, 0) + 1
-        
-        logger.info(f"📊 Distribución por tipo: {tipos_stats}")
-        
-        return jsonify({
-            'success': True, 
-            'leads': leads,
-            'total': len(leads),
-            'tipos': tipos_stats
-        }), 200
-        
-    except Exception as e:
-        logger.error(f"Error en search_places: {e}")
-        return jsonify({
-            'success': False,
-            'error': f'Error en la búsqueda: {str(e)[:100]}',
-            'leads': []
-        }), 200
-
-# ========== RUTA DE BÚSQUEDA POR TIPO ESPECÍFICO ==========
-@app.route('/search_agro_by_type', methods=['POST'])
-def search_agro_by_type():
-    """Busca establecimientos agropecuarios por tipo específico."""
-    data = request.json
-    zona = data.get('zona')
-    tipo = data.get('tipo', 'agropecuaria')  # agrocomercial, agroveterinaria, agroinsumos, agroanimal, agropecuaria
-    
-    if not gmaps:
-        return jsonify({'success': False, 'error': 'Google Maps no configurado', 'leads': []}), 200
-    
-    if not zona:
-        return jsonify({'success': False, 'error': 'Zona no especificada', 'leads': []}), 200
-    
-    try:
-        logger.info(f"🔍 Buscando {tipo} en: {zona}")
-        
-        # Mapeo de tipos a términos de búsqueda
-        tipos_map = {
-            'agrocomercial': f"agrocomercial en {zona}",
-            'agroveterinaria': f"agroveterinaria en {zona}",
-            'agroinsumos': f"agroinsumos en {zona}",
-            'agroanimal': f"agroanimal en {zona}",
-            'agropecuaria': f"agropecuaria en {zona}",
-            'veterinaria': f"veterinaria campo {zona}",
-            'insumos': f"insumos agropecuarios {zona}",
-            'semillas': f"semillas {zona}"
-        }
-        
-        query = tipos_map.get(tipo, f"{tipo} en {zona}")
-        
-        leads = []
-        all_results = []
-        
-        response = gmaps.places(query=query)
-        if response.get('results'):
-            all_results.extend(response.get('results', []))
-            logger.info(f"✅ Encontrados {len(response['results'])} con: '{query}'")
-            
-            # Intentar obtener segunda página
-            if 'next_page_token' in response:
-                time.sleep(2)
-                try:
-                    next_response = gmaps.places(page_token=response['next_page_token'])
-                    if next_response.get('results'):
-                        all_results.extend(next_response.get('results', []))
-                        logger.info(f"✅ +{len(next_response['results'])} más de segunda página")
-                except Exception as e:
-                    logger.debug(f"Error obteniendo segunda página: {e}")
-        
-        if not all_results:
-            return jsonify({'success': True, 'leads': [], 'total': 0}), 200
-        
-        results = all_results[:30]
-        
-        for idx, p in enumerate(results):
-            try:
-                det = gmaps.place(
-                    place_id=p['place_id'], 
-                    fields=['name', 'formatted_address', 'formatted_phone_number', 'website']
-                )['result']
-                
-                tel_raw = det.get('formatted_phone_number', '')
-                tel_clean = re.sub(r'\D', '', tel_raw)
-                
-                if tel_clean and not tel_clean.startswith('54'):
-                    tel_clean = '54' + tel_clean if not tel_clean.startswith('0') else '54' + tel_clean[1:]
-                
-                web = det.get('website', '')
-                contacto = {"email": "", "facebook": "", "instagram": ""}
-                
-                if web and idx % 3 == 0:
                     try:
                         contacto = scraping_profundo_contacto(web, False)
                     except:
@@ -747,25 +611,35 @@ def search_agro_by_type():
                     'facebook': contacto["facebook"] or '',
                     'instagram': contacto["instagram"] or '',
                     'web': web or '',
-                    'tipo': tipo
+                    'tipo': rubro,
+                    'sin_web': sin_web
                 })
-                
+
+                # Pequeña pausa entre procesamientos para no saturar
                 if idx % 5 == 0 and idx > 0:
                     time.sleep(0.5)
-                    
+
             except Exception as e:
-                logger.error(f"Error procesando lugar: {e}")
+                logger.error(f"Error procesando lugar {idx}: {e}")
                 continue
-        
+
+        sin_web_count = sum(1 for l in leads if l['sin_web'])
+        logger.info(f"✅ Total leads procesados: {len(leads)} ({sin_web_count} sin sitio web)")
+
         return jsonify({
-            'success': True, 
+            'success': True,
             'leads': leads,
-            'total': len(leads)
+            'total': len(leads),
+            'sin_web': sin_web_count
         }), 200
-        
+
     except Exception as e:
-        logger.error(f"Error en search_agro_by_type: {e}")
-        return jsonify({'success': False, 'error': str(e), 'leads': []}), 200
+        logger.error(f"Error en search_places: {e}")
+        return jsonify({
+            'success': False,
+            'error': f'Error en la búsqueda: {str(e)[:100]}',
+            'leads': []
+        }), 200
 
 # ========== RUTA DE GENERACIÓN CSV ==========
 @app.route('/generate_csv', methods=['POST'])
@@ -809,9 +683,9 @@ def ai_query():
     if "email" in prompt.lower() or "contacto" in prompt.lower():
         default_response = "No encontrado"
     elif "consejos" in prompt.lower():
-        default_response = "1. Destaca origen misionero\n2. Precios competitivos\n3. Ofrece muestras"
+        default_response = "1. Ofrece la primera etapa sin costo\n2. Mostrá ejemplos de antes/después\n3. Destacá aparecer primero en Google Maps"
     elif "mensaje" in prompt.lower():
-        default_response = "Hola {nombre}, te comparto nuestra lista de precios mayorista de Yerba Mate Soberanía. ¿Te interesaría recibirla?"
+        default_response = "Hola {nombre}, te escribo de Digitalízate. Ayudamos a comercios como el tuyo a conseguir más clientes online. ¿Te interesaría una propuesta sin costo?"
 
     # MODELOS CORRECTOS según la respuesta de la API
     modelos = [
