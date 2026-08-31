@@ -761,24 +761,18 @@ Equipo Digitalízate
             modal.style.display = 'flex';
             content.innerHTML = '🚀 INICIANDO ENVÍO CON GMAIL API...\n\n';
             content.innerHTML += `📧 Destinatarios: ${selectedLeads.length}\n`;
-            content.innerHTML += `📎 Adjunto: producto.png\n`;
+            content.innerHTML += `📎 Adjunto: ${window.productoImageExists ? 'producto.png' : 'ninguno'}\n`;
             content.innerHTML += `⏳ Enviando emails automáticamente...\n\n`;
             
             progressFill.style.width = '0%';
             progressText.innerText = '0% completado';
             
-            // Preparar datos para envío
-            const leadsConIndice = selectedLeads.map((lead, index) => ({
-                ...lead,
-                original_index: index
-            }));
-            
-            // Enviar petición
+            // Enviar petición (selectedLeads ya trae original_index correcto de obtenerLeadsSeleccionados)
             fetch('/send_bulk_emails_gmail', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    leads: leadsConIndice,
+                    leads: selectedLeads,
                     subject: subject,
                     body: body,
                     attach_image: attachImage
@@ -872,7 +866,7 @@ Equipo Digitalízate
             document.querySelectorAll('.lead-check:checked').forEach(c => {
                 const idx = parseInt(c.dataset.index);
                 if (leads[idx] && leads[idx].email && leads[idx].email !== '-' && leads[idx].email !== '---' && leads[idx].email !== '') {
-                    selected.push(leads[idx]);
+                    selected.push({...leads[idx], original_index: idx});
                 }
             });
             return selected;
@@ -1432,7 +1426,7 @@ Equipo Digitalízate
             modal.style.display = 'flex';
             content.innerHTML = '🚀 INICIANDO CAMPAÑA DE EMAILS...\n\n';
             content.innerHTML += `📧 Destinatarios: ${selected.length}\n`;
-            content.innerHTML += `📎 Adjunto: producto.png\n`;
+            content.innerHTML += `📎 Adjunto: ${window.productoImageExists ? 'producto.png' : 'ninguno'}\n`;
             content.innerHTML += `👤 Remitente: ${user}\n`;
             content.innerHTML += `🔑 Clave: ${passSinEspacios.substring(0,4)}...${passSinEspacios.substring(passSinEspacios.length-4)} (${passSinEspacios.length} caracteres)\n\n`;
             content.innerHTML += `⏳ Enviando emails...\n\n`;
