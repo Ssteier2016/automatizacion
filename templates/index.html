@@ -628,7 +628,7 @@ Equipo Digitalízate
             {
                 elemento: 'tutorial-step-1',
                 titulo: '🔍 PASO 1: BUSCAR COMERCIOS',
-                texto: 'Ingresa una zona (ej: "Morón, Buenos Aires") y presiona el botón de búsqueda. El sistema encontrará dietéticas y comercios naturales.',
+                texto: 'Elegí un rubro, ingresá una zona (ej: "Morón, Buenos Aires") y presioná el botón de búsqueda. El sistema encontrará comercios de ese rubro en la zona.',
                 posicion: 'right'
             },
             {
@@ -652,7 +652,7 @@ Equipo Digitalízate
             {
                 elemento: 'tutorial-step-5',
                 titulo: '✅ PASO 5: ENVIAR EMAILS INDIVIDUALES',
-                texto: 'HAZ CLIC sobre el email del comercio para abrir tu cliente de correo y enviar un email individual con la imagen adjunta.',
+                texto: 'HAZ CLIC sobre el email del comercio para abrir tu cliente de correo y enviar un email individual.',
                 posicion: 'bottom'
             },
             {
@@ -704,12 +704,26 @@ Equipo Digitalízate
                 `;
                 buttonsContainer.innerHTML = `
                     <div class="btn-group">
-                        <a href="/connect_gmail" target="_blank" class="btn btn-warning">
+                        <button onclick="conectarGmail()" class="btn btn-warning">
                             <i class="fa-solid fa-plug"></i> Conectar Gmail
-                        </a>
+                        </button>
                     </div>
                 `;
             }
+        }
+
+        function conectarGmail() {
+            const popup = window.open('/connect_gmail', 'gmail_oauth', 'width=500,height=650');
+            if (!popup) {
+                mostrarNotificacion('⚠️ El navegador bloqueó la ventana emergente. Habilítala e intenta de nuevo.', 'warning');
+                return;
+            }
+            const poll = setInterval(() => {
+                if (popup.closed) {
+                    clearInterval(poll);
+                    checkGmailAuth();
+                }
+            }, 500);
         }
 
         function logoutGmail() {
@@ -1102,7 +1116,7 @@ Equipo Digitalízate
                     await new Promise(r => setTimeout(r, pausaIA));
                 }
                 
-                const prompt = `Negocio: ${leads[i].nombre}. Ubicación: ${leads[i].direccion}. Responde ÚNICAMENTE el email corporativo o de contacto para ventas mayoristas de este comercio. Si no sabes, responde "No encontrado".`;
+                const prompt = `Negocio: ${leads[i].nombre}. Ubicación: ${leads[i].direccion}. Responde ÚNICAMENTE el email corporativo o de contacto comercial de este negocio. Si no sabes, responde "No encontrado".`;
                 
                 const res = await callGemini(prompt, "Experto en búsqueda comercial en Argentina. Busca emails reales de contactos comerciales.", 10000);
                 
@@ -1723,6 +1737,13 @@ Equipo Digitalízate
 
         // ========== INICIALIZACIÓN ==========
         window.onload = () => {
+            // Si esta ventana es el popup de OAuth de Gmail, avisar y cerrarse sola
+            const params = new URLSearchParams(window.location.search);
+            if (window.opener && !window.opener.closed && (params.has('auth_success') || params.has('error'))) {
+                window.close();
+                return;
+            }
+
             // Verificar imagen
             const img = document.getElementById('productImagePreview');
             img.onerror = function() {

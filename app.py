@@ -37,6 +37,8 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 # Clave secreta desde variable de entorno
 app.secret_key = os.environ.get('SECRET_KEY', 'clave-por-defecto-cambiar')
+# Recargar templates sin reiniciar el server (costo despreciable para este tráfico)
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 CORS(app)
 
 app.config['UPLOAD_FOLDER'] = '/tmp/uploads'
