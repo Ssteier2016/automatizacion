@@ -913,7 +913,7 @@ Equipo Digitalízate
             }
         }
 
-        function cargarClaveGuardada() {
+        function cargarClaveGuardada(silent = false) {
             const claveGuardada = localStorage.getItem('gmail_app_password');
             if (claveGuardada && claveGuardada.length === 16) {
                 // Formatear con espacios cada 4 caracteres para mejor legibilidad
@@ -921,8 +921,8 @@ Equipo Digitalízate
                 document.getElementById('emailPass').value = claveFormateada;
                 document.getElementById('claveGuardadaInfo').classList.remove('hidden');
                 validarClave();
-                mostrarNotificacion('🔑 Clave cargada desde caché', 'info');
-            } else {
+                if (!silent) mostrarNotificacion('🔑 Clave cargada desde caché', 'info');
+            } else if (!silent) {
                 mostrarNotificacion('❌ No hay clave guardada o es inválida', 'error');
             }
         }
@@ -1752,7 +1752,7 @@ Equipo Digitalízate
             };
             
             // Cargar clave guardada
-            cargarClaveGuardada();
+            cargarClaveGuardada(true);
             
             // Validar clave al cargar
             validarClave();
